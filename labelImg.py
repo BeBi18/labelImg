@@ -47,6 +47,7 @@ from libs.create_ml_io import CreateMLReader
 from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
+from libs.image_processor import ImageProcessorWidget
 
 __appname__ = 'labelImg'
 
@@ -163,8 +164,6 @@ class MainWindow(QMainWindow, WindowMixin):
         self.label_list.itemChanged.connect(self.label_item_changed)
         list_layout.addWidget(self.label_list)
 
-
-
         self.dock = QDockWidget(get_str('boxLabelText'), self)
         self.dock.setObjectName(get_str('labels'))
         self.dock.setWidget(label_list_container)
@@ -179,6 +178,13 @@ class MainWindow(QMainWindow, WindowMixin):
         self.file_dock = QDockWidget(get_str('fileList'), self)
         self.file_dock.setObjectName(get_str('files'))
         self.file_dock.setWidget(file_list_container)
+
+        # Add image processor widget
+        self.image_processor = ImageProcessorWidget()
+        self.image_processor_dock = QDockWidget("Tiền xử lý ảnh", self)
+        self.image_processor_dock.setObjectName("image_processor")
+        self.image_processor_dock.setWidget(self.image_processor)
+        self.image_processor.image_processed.connect(self.update_processed_image)
 
         self.zoom_widget = ZoomWidget()
         self.light_widget = LightWidget(get_str('lightWidgetTitle'))
@@ -207,6 +213,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.setCentralWidget(scroll)
         self.addDockWidget(Qt.RightDockWidgetArea, self.dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.file_dock)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.image_processor_dock)
         self.file_dock.setFeatures(QDockWidget.DockWidgetFloatable)
 
         self.dock_features = QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetFloatable
@@ -1149,6 +1156,10 @@ class MainWindow(QMainWindow, WindowMixin):
             self.image = image
             self.file_path = unicode_file_path
             self.canvas.load_pixmap(QPixmap.fromImage(image))
+            
+            # Set image for processor
+            self.image_processor.set_image(image)
+            
             if self.label_file:
                 self.load_labels(self.label_file.shapes)
             self.set_clean()
@@ -1305,12 +1316,11 @@ class MainWindow(QMainWindow, WindowMixin):
 
         if dir_path is not None and len(dir_path) > 1:
             self.default_save_dir = dir_path
+            self.show_bounding_box_from_annotation_file(self.file_path)
 
-        self.show_bounding_box_from_annotation_file(self.file_path)
-
-        self.statusBar().showMessage('%s . Annotation will be saved to %s' %
-                                     ('Change saved folder', self.default_save_dir))
-        self.statusBar().show()
+            self.statusBar().showMessage('%s . Annotation will be saved to %s' %
+                                         ('Change saved folder', self.default_save_dir))
+            self.statusBar().show()
 
 
     def open_annotation_dialog(self, _value=False):
@@ -1668,6 +1678,11 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def toggle_draw_square(self):
         self.canvas.set_drawing_shape_to_square(self.draw_squares_option.isChecked())
+
+    def update_processed_image(self, qimage):
+        """Cập nhật ảnh đã xử lý lên canvas"""
+        self.canvas.load_pixmap(QPixmap.fromImage(qimage))
+        self.paint_canvas()
 
 def inverted(color):
     return QColor(*[255 - v for v in color.getRgb()])
