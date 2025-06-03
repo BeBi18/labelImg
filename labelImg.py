@@ -8,6 +8,8 @@ import shutil
 import sys
 import webbrowser as wb
 from functools import partial
+import numpy as np
+import cv2
 
 try:
     from PyQt5.QtGui import *
@@ -48,6 +50,7 @@ from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
 from libs.image_processor import ImageProcessorWidget
+from libs.image_augmentation import AugmentationWidget, augment_image, update_bbox
 
 __appname__ = 'labelImg'
 
@@ -108,6 +111,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self._beginner = True
         self.screencast = "https://youtu.be/p0nR2YsCY_U"
 
+        # Lưu trữ ảnh gốc
+        self.original_image = None
         # Load predefined classes to the list
         self.load_predefined_classes(default_prefdef_class_file)
 
@@ -218,6 +223,13 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.dock_features = QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetFloatable
         self.dock.setFeatures(self.dock.features() ^ self.dock_features)
+
+        # Add augmentation widget
+        self.augmentation_widget = AugmentationWidget(self)
+        self.augmentation_dock = QDockWidget("Augmentation", self)
+        self.augmentation_dock.setObjectName("augmentation")
+        self.augmentation_dock.setWidget(self.augmentation_widget)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.augmentation_dock)
 
         # Actions
         action = partial(new_action, self)
@@ -657,6 +669,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.reset_state()
         self.label_coordinates.clear()
         self.combo_box.cb.clear()
+        # Lưu trữ ảnh gốc
+        self.original_image = None
 
     def current_item(self):
         items = self.label_list.selectedItems()
@@ -1154,6 +1168,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 return False
             self.status("Loaded %s" % os.path.basename(unicode_file_path))
             self.image = image
+            self.original_image = image.copy()
             self.file_path = unicode_file_path
             self.canvas.load_pixmap(QPixmap.fromImage(image))
             
@@ -1683,6 +1698,148 @@ class MainWindow(QMainWindow, WindowMixin):
         """Cập nhật ảnh đã xử lý lên canvas"""
         self.canvas.load_pixmap(QPixmap.fromImage(qimage))
         self.paint_canvas()
+
+    def has_labels(self):
+        """Kiểm tra xem ảnh hiện tại đã có nhãn chưa"""
+        return len(self.canvas.shapes) > 0
+        
+    def get_augmentation_params(self):
+        """Lấy các tham số augmentation từ widget"""
+        widget = self.augmentation_widget
+        params = {
+            'rotate': widget.rotate_cb.isChecked(),
+            'rotate_min': widget.rotate_min.value(),
+            'rotate_max': widget.rotate_max.value(),
+            'flip': widget.flip_cb.isChecked(),
+            'flip_h': widget.flip_h.isChecked(),
+            'flip_v': widget.flip_v.isChecked(),
+            'bright': widget.bright_cb.isChecked(),
+            'bright_min': widget.bright_min.value(),
+            'bright_max': widget.bright_max.value(),
+            'blur': widget.blur_cb.isChecked(),
+            'blur_min': widget.blur_min.value(),
+            'blur_max': widget.blur_max.value()
+        }
+        return params
+        
+    def augment_current_image(self, save_dir):
+        """Augment ảnh hiện tại và lưu vào thư mục save_dir"""
+        if not self.has_labels():
+            return
+            
+        # Lấy ảnh hiện tại
+        image = self.original_image
+        if image.isNull():
+            return
+            
+        if not self.augmentation_widget.has_augmentation_enabled():
+            QMessageBox.warning(self, "Cảnh báo", 
+                            "Vui lòng chọn ít nhất một kỹ thuật augmentation!")
+            return
+            
+        # Chuyển QImage sang numpy array
+        width = image.width()
+        height = image.height()
+        
+        # Chuyển đổi QImage sang numpy array dựa trên format của ảnh
+        if image.format() == QImage.Format_RGB32:
+            ptr = image.bits()
+            ptr.setsize(height * width * 4)
+            arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 4))
+            arr = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
+        elif image.format() == QImage.Format_RGB888:
+            ptr = image.bits()
+            ptr.setsize(height * width * 3)
+            arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
+        else:
+            # Chuyển sang RGB nếu là grayscale
+            image = image.convertToFormat(QImage.Format_RGB888)
+            ptr = image.bits()
+            ptr.setsize(height * width * 3)
+            arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
+        
+        # Lấy số lượng ảnh cần tạo
+        num_images = self.augmentation_widget.num_images.value()
+        
+        # Lấy tên file gốc
+        base_name = os.path.splitext(os.path.basename(self.file_path))[0]
+        
+        # Tạo các ảnh mới
+        for i in range(num_images):
+            # Lấy tham số augmentation
+            params = self.get_augmentation_params()
+            
+            # Augment ảnh
+            augmented = augment_image(arr, params)
+            
+            # Lưu ảnh
+            save_path = os.path.join(save_dir, f"{base_name}_aug_{i}.jpg")
+            cv2.imwrite(save_path, augmented)
+            
+            # Cập nhật và lưu nhãn
+            shapes = []
+            for shape in self.canvas.shapes:
+                # Cập nhật tọa độ bounding box
+                bbox = [shape.points[0].x(), shape.points[0].y(),
+                       shape.points[2].x(), shape.points[2].y()]
+                new_bbox = update_bbox(bbox, augmented.shape, params)
+                
+                # Tạo shape mới dưới dạng dictionary
+                new_shape = {
+                    'label': shape.label,
+                    'points': [(new_bbox[0], new_bbox[1]), 
+                             (new_bbox[2], new_bbox[1]),
+                             (new_bbox[2], new_bbox[3]),
+                             (new_bbox[0], new_bbox[3])],
+                    'line_color': self.line_color.getRgb(),
+                    'fill_color': self.fill_color.getRgb(),
+                    'difficult': shape.difficult
+                }
+                shapes.append(new_shape)
+            
+            # Lưu file nhãn theo định dạng hiện tại
+            label_path = os.path.splitext(save_path)[0] + LabelFile.suffix
+            
+            # Tạo label file mới
+            label_file = LabelFile()
+            label_file.verified = self.canvas.verified
+            
+            if self.label_file_format == LabelFileFormat.PASCAL_VOC:
+                label_file.save_pascal_voc_format(label_path, shapes, save_path, None,
+                                                self.line_color.getRgb(), self.fill_color.getRgb())
+            elif self.label_file_format == LabelFileFormat.YOLO:
+                label_file.save_yolo_format(label_path, shapes, save_path, None, self.label_hist,
+                                          self.line_color.getRgb(), self.fill_color.getRgb())
+            elif self.label_file_format == LabelFileFormat.CREATE_ML:
+                label_file.save_create_ml_format(label_path, shapes, save_path, None,
+                                                self.label_hist, self.line_color.getRgb(), self.fill_color.getRgb())
+        
+        QMessageBox.information(self, "Thông báo", 
+                              f"Đã tạo {num_images} ảnh mới trong thư mục {save_dir}")
+
+    def augment_all_images(self, save_dir):
+        """Augment tất cả ảnh trong thư mục hiện tại"""
+        if not self.m_img_list:
+            return
+            
+        # Lấy tham số augmentation
+        params = self.get_augmentation_params()
+        
+        # Augment từng ảnh
+        for img_path in self.m_img_list:
+            # Load ảnh
+            self.load_file(img_path)
+            
+            # Kiểm tra có nhãn không
+            if not self.has_labels():
+                print(f"Bỏ qua {img_path} vì chưa có nhãn")
+                continue
+                
+            # Augment ảnh
+            self.augment_current_image(save_dir)
+            
+        QMessageBox.information(self, "Thông báo", 
+                              "Đã hoàn thành augmentation cho tất cả ảnh")
 
 def inverted(color):
     return QColor(*[255 - v for v in color.getRgb()])
