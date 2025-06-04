@@ -102,6 +102,16 @@ class AugmentationWidget(QWidget):
         num_layout.addWidget(self.num_images)
         layout.addLayout(num_layout)
         
+        # Phần trăm ảnh được chọn để augment
+        percent_layout = QHBoxLayout()
+        percent_layout.addWidget(QLabel("Phần trăm ảnh được chọn:"))
+        self.percent_images = QSpinBox()
+        self.percent_images.setRange(1, 100)
+        self.percent_images.setValue(50)
+        percent_layout.addWidget(self.percent_images)
+        percent_layout.addWidget(QLabel("%"))
+        layout.addLayout(percent_layout)
+        
         # Nút thực hiện
         btn_layout = QHBoxLayout()
         self.augment_btn = QPushButton("Augment Image")
@@ -160,8 +170,34 @@ class AugmentationWidget(QWidget):
         if not save_dir:
             return
             
-        # Thực hiện augmentation cho tất cả ảnh
-        self.main_window.augment_all_images(save_dir)
+        # Lấy danh sách ảnh có nhãn
+        labeled_images = []
+        for img_path in self.main_window.m_img_list:
+            self.main_window.load_file(img_path)
+            if self.main_window.has_labels():
+                labeled_images.append(img_path)
+                
+        if not labeled_images:
+            QMessageBox.warning(self, "Cảnh báo", 
+                              "Không có ảnh nào có nhãn!")
+            return
+            
+        # Tính số lượng ảnh sẽ được chọn
+        percent = self.percent_images.value() / 100.0
+        num_images = max(1, int(len(labeled_images) * percent))
+        
+        # Random chọn ảnh
+        selected_images = random.sample(labeled_images, num_images)
+        
+        # Augment từng ảnh được chọn
+        total_augmented = 0
+        for img_path in selected_images:
+            self.main_window.load_file(img_path)
+            self.main_window.augment_current_image(save_dir)
+            total_augmented += self.num_images.value()
+            
+        QMessageBox.information(self, "Thông báo", 
+                              f"Đã tạo {total_augmented} ảnh mới từ {num_images} ảnh gốc trong thư mục {save_dir}")
 
 def rotate_image(image, angle):
     """Xoay ảnh một góc angle độ"""
@@ -202,30 +238,72 @@ def augment_image(image, params):
     
     augmented = image.copy()
     
-    # Rotate
+    # if params.get('rotate', False):
+    #     angle = random.uniform(params['rotate_min'], params['rotate_max'])
+    #     augmented = rotate_image(augmented, angle)
+    #     params['angle'] = angle  # Lưu góc xoay để sử dụng cho bbox
+        
+    # # Flip
+    # if params.get('flip', False):
+    #     h_flip = random.random() < 0.5 if params.get('flip_h', False) else False
+    #     v_flip = random.random() < 0.5 if params.get('flip_v', False) else False
+    #     augmented = flip_image(augmented, h_flip, v_flip)
+    #     params['flip_h'] = h_flip  # Lưu trạng thái flip để sử dụng cho bbox
+    #     params['flip_v'] = v_flip
+        
+    # # Brightness
+    # if params.get('bright', False):
+    #     factor = random.uniform(params['bright_min'], params['bright_max'])
+    #     augmented = adjust_brightness(augmented, factor)
+        
+    # # Blur
+    # if params.get('blur', False):
+    #     kernel_size = random.randint(params['blur_min'], params['blur_max'])
+    #     kernel_size = kernel_size * 2 + 1  # Đảm bảo kernel size là số lẻ
+    #     augmented = apply_blur(augmented, kernel_size)
+
+    # Tạo danh sách các phương pháp augmentation được bật
+    enabled_methods = []
     if params.get('rotate', False):
-        angle = random.uniform(params['rotate_min'], params['rotate_max'])
-        augmented = rotate_image(augmented, angle)
-        params['angle'] = angle  # Lưu góc xoay để sử dụng cho bbox
-        
-    # Flip
+        enabled_methods.append('rotate')
     if params.get('flip', False):
-        h_flip = random.random() < 0.5 if params.get('flip_h', False) else False
-        v_flip = random.random() < 0.5 if params.get('flip_v', False) else False
-        augmented = flip_image(augmented, h_flip, v_flip)
-        params['flip_h'] = h_flip  # Lưu trạng thái flip để sử dụng cho bbox
-        params['flip_v'] = v_flip
-        
-    # Brightness
+        enabled_methods.append('flip')
     if params.get('bright', False):
-        factor = random.uniform(params['bright_min'], params['bright_max'])
-        augmented = adjust_brightness(augmented, factor)
-        
-    # Blur
+        enabled_methods.append('bright')
     if params.get('blur', False):
-        kernel_size = random.randint(params['blur_min'], params['blur_max'])
-        kernel_size = kernel_size * 2 + 1  # Đảm bảo kernel size là số lẻ
-        augmented = apply_blur(augmented, kernel_size)
+        enabled_methods.append('blur')
+        
+    # Random số lượng phương pháp sẽ áp dụng (ít nhất 1, nhiều nhất là số phương pháp đã bật)
+    num_methods = random.randint(1, len(enabled_methods))
+    
+    # Random chọn các phương pháp sẽ áp dụng
+    selected_methods = random.sample(enabled_methods, num_methods)
+    
+    # Lưu lại thông tin về các phương pháp đã chọn
+    params['applied_methods'] = selected_methods
+    
+    # Áp dụng các phương pháp đã chọn
+    for method in selected_methods:
+        if method == 'rotate':
+            angle = random.uniform(params['rotate_min'], params['rotate_max'])
+            augmented = rotate_image(augmented, angle)
+            params['angle'] = angle  # Lưu góc xoay để sử dụng cho bbox
+            
+        elif method == 'flip':
+            h_flip = random.random() < 0.5 if params.get('flip_h', False) else False
+            v_flip = random.random() < 0.5 if params.get('flip_v', False) else False
+            augmented = flip_image(augmented, h_flip, v_flip)
+            params['flip_h'] = h_flip  # Lưu trạng thái flip để sử dụng cho bbox
+            params['flip_v'] = v_flip
+            
+        elif method == 'bright':
+            factor = random.uniform(params['bright_min'], params['bright_max'])
+            augmented = adjust_brightness(augmented, factor)
+            
+        elif method == 'blur':
+            kernel_size = random.randint(params['blur_min'], params['blur_max'])
+            kernel_size = kernel_size * 2 + 1  # Đảm bảo kernel size là số lẻ
+            augmented = apply_blur(augmented, kernel_size)
         
     return augmented
 
@@ -234,29 +312,29 @@ def update_bbox(bbox, image_shape, params):
     height, width = image_shape[:2]
     x1, y1, x2, y2 = bbox
     
-    # Rotate
-    if params.get('rotate', False):
-        angle = params.get('angle', 0)
-        center = (width/2, height/2)
-        rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        
-        # Chuyển đổi tọa độ
-        points = np.array([[x1,y1], [x2,y1], [x2,y2], [x1,y2]])
-        ones = np.ones(shape=(len(points), 1))
-        points_ones = np.hstack([points, ones])
-        transformed_points = rotation_matrix.dot(points_ones.T).T
-        
-        x1 = min(transformed_points[:,0])
-        y1 = min(transformed_points[:,1])
-        x2 = max(transformed_points[:,0])
-        y2 = max(transformed_points[:,1])
-        
-    # Flip
-    if params.get('flip', False):
-        if params.get('flip_h', False):
-            x1, x2 = width - x2, width - x1
-        if params.get('flip_v', False):
-            y1, y2 = height - y2, height - y1
+    # Chỉ cập nhật bbox cho các phương pháp đã được chọn ngẫu nhiên
+    for method in params.get('applied_methods', []):
+        if method == 'rotate':
+            angle = params.get('angle', 0)
+            center = (width/2, height/2)
+            rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+            
+            # Chuyển đổi tọa độ
+            points = np.array([[x1,y1], [x2,y1], [x2,y2], [x1,y2]])
+            ones = np.ones(shape=(len(points), 1))
+            points_ones = np.hstack([points, ones])
+            transformed_points = rotation_matrix.dot(points_ones.T).T
+            
+            x1 = min(transformed_points[:,0])
+            y1 = min(transformed_points[:,1])
+            x2 = max(transformed_points[:,0])
+            y2 = max(transformed_points[:,1])
+            
+        elif method == 'flip':
+            if params.get('flip_h', False):
+                x1, x2 = width - x2, width - x1
+            if params.get('flip_v', False):
+                y1, y2 = height - y2, height - y1
             
     # Đảm bảo tọa độ nằm trong ảnh
     x1 = max(0, min(x1, width))
