@@ -26,14 +26,19 @@ class AugmentationWidget(QWidget):
         return None
         
     def init_ui(self):
+        # Layout chính
         layout = QVBoxLayout()
+        layout.setSpacing(15)
+        layout.setContentsMargins(10, 10, 10, 10)
         
         # Group các kỹ thuật augmentation
         aug_group = QGroupBox("Kỹ thuật augmentation")
         aug_layout = QVBoxLayout()
+        aug_layout.setSpacing(10)
         
         # Rotate
         rotate_layout = QHBoxLayout()
+        rotate_layout.setSpacing(10)
         self.rotate_cb = QCheckBox("Xoay ảnh")
         self.rotate_min = QSpinBox()
         self.rotate_min.setRange(-180, 180)
@@ -50,8 +55,10 @@ class AugmentationWidget(QWidget):
         
         # Flip
         flip_layout = QHBoxLayout()
+        flip_layout.setSpacing(10)
         self.flip_cb = QCheckBox("Lật ảnh")
         self.flip_h = QCheckBox("Lật ngang")
+        self.flip_h.setChecked(True)
         self.flip_v = QCheckBox("Lật dọc")
         flip_layout.addWidget(self.flip_cb)
         flip_layout.addWidget(self.flip_h)
@@ -60,6 +67,7 @@ class AugmentationWidget(QWidget):
         
         # Brightness
         bright_layout = QHBoxLayout()
+        bright_layout.setSpacing(10)
         self.bright_cb = QCheckBox("Độ sáng")
         self.bright_min = QDoubleSpinBox()
         self.bright_min.setRange(0.5, 2.0)
@@ -76,6 +84,7 @@ class AugmentationWidget(QWidget):
         
         # Blur
         blur_layout = QHBoxLayout()
+        blur_layout.setSpacing(10)
         self.blur_cb = QCheckBox("Làm mờ")
         self.blur_min = QSpinBox()
         self.blur_min.setRange(1, 10)
@@ -93,27 +102,40 @@ class AugmentationWidget(QWidget):
         aug_group.setLayout(aug_layout)
         layout.addWidget(aug_group)
         
+        # Group cài đặt số lượng
+        settings_group = QGroupBox("Cài đặt số lượng")
+        settings_layout = QVBoxLayout()
+        settings_layout.setSpacing(10)
+        
         # Số lượng ảnh mới
         num_layout = QHBoxLayout()
+        num_layout.setSpacing(10)
         num_layout.addWidget(QLabel("Số lượng ảnh mới:"))
         self.num_images = QSpinBox()
         self.num_images.setRange(1, 100)
         self.num_images.setValue(5)
         num_layout.addWidget(self.num_images)
-        layout.addLayout(num_layout)
+        num_layout.addStretch()
+        settings_layout.addLayout(num_layout)
         
-        # Phần trăm ảnh được chọn để augment
+        # Phần trăm ảnh được chọn
         percent_layout = QHBoxLayout()
+        percent_layout.setSpacing(10)
         percent_layout.addWidget(QLabel("Phần trăm ảnh được chọn:"))
         self.percent_images = QSpinBox()
         self.percent_images.setRange(1, 100)
         self.percent_images.setValue(50)
         percent_layout.addWidget(self.percent_images)
         percent_layout.addWidget(QLabel("%"))
-        layout.addLayout(percent_layout)
+        percent_layout.addStretch()
+        settings_layout.addLayout(percent_layout)
+        
+        settings_group.setLayout(settings_layout)
+        layout.addWidget(settings_group)
         
         # Nút thực hiện
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
         self.augment_btn = QPushButton("Augment Image")
         self.apply_all_btn = QPushButton("Apply All")
         btn_layout.addWidget(self.augment_btn)

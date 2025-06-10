@@ -1663,7 +1663,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.set_format(FORMAT_YOLO)
         t_yolo_parse_reader = YoloReader(txt_path, self.image)
         shapes = t_yolo_parse_reader.get_shapes()
-        print(shapes)
+        # print(shapes)
         self.load_labels(shapes)
         self.canvas.verified = t_yolo_parse_reader.verified
 
@@ -1740,24 +1740,81 @@ class MainWindow(QMainWindow, WindowMixin):
         # Chuyển QImage sang numpy array
         width = image.width()
         height = image.height()
-        
+        print('image.format()', image.format())
+        print('image.format()', type(image.format()))
         # Chuyển đổi QImage sang numpy array dựa trên format của ảnh
+        # if image.format() == QImage.Format_RGB32:
+        #     print('image.format()', image.format())
+        #     ptr = image.bits()
+        #     ptr.setsize(height * width * 4)
+        #     arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 4))
+        #     arr = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
+        # elif image.format() == QImage.Format_RGB888:
+        #     ptr = image.bits()
+        #     ptr.setsize(height * width * 3)
+        #     arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
+        # else:
+        #     # Chuyển sang RGB nếu là grayscale
+        #     image = image.convertToFormat(QImage.Format_RGB888)
+        #     ptr = image.bits()
+        #     ptr.setsize(height * width * 3)
+        #     arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
+        
         if image.format() == QImage.Format_RGB32:
+            # Format_RGB32 = 4, actually BGRA format in Qt
+            print('Processing RGB32 (BGRA) format')
             ptr = image.bits()
             ptr.setsize(height * width * 4)
             arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 4))
-            arr = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
+            # RGB32 in Qt is actually BGRA, so we need to convert BGRA to BGR
+            arr = cv2.cvtColor(arr, cv2.COLOR_BGRA2BGR)
+            
+        elif image.format() == QImage.Format_ARGB32:
+            # Format_ARGB32 = 2, ARGB format
+            print('Processing ARGB32 format')
+            ptr = image.bits()
+            ptr.setsize(height * width * 4)
+            arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 4))
+            # Convert ARGB to BGR (remove alpha channel and reorder)
+            arr = arr[:, :, [2, 1, 0]]  # A,R,G,B -> B,G,R
+            
         elif image.format() == QImage.Format_RGB888:
+            # Format_RGB888 = 13
+            print('Processing RGB888 format')
             ptr = image.bits()
             ptr.setsize(height * width * 3)
             arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
-        else:
-            # Chuyển sang RGB nếu là grayscale
+            # RGB888 is RGB, convert to BGR for OpenCV
+            arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+            
+        elif image.format() == QImage.Format_Grayscale8:
+            # Format_Grayscale8 = 24
+            print('Processing Grayscale8 format')
+            ptr = image.bits()
+            ptr.setsize(height * width)
+            arr = np.frombuffer(ptr, np.uint8).reshape((height, width))
+            # Convert grayscale to BGR
+            arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2BGR)
+            
+        elif image.format() == QImage.Format_Indexed8:
+            # Format_Indexed8 = 3
+            print('Processing Indexed8 format')
+            # Convert to RGB888 first
             image = image.convertToFormat(QImage.Format_RGB888)
             ptr = image.bits()
             ptr.setsize(height * width * 3)
             arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
-        
+            arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+            
+        else:
+            # Handle other formats by converting to RGB888
+            print(f'Converting unknown format {image.format()} to RGB888')
+            image = image.convertToFormat(QImage.Format_RGB888)
+            ptr = image.bits()
+            ptr.setsize(height * width * 3)
+            arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
+            arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+
         # Lấy số lượng ảnh cần tạo
         num_images = self.augmentation_widget.num_images.value()
         
