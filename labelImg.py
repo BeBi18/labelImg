@@ -850,18 +850,27 @@ class MainWindow(QMainWindow, WindowMixin):
         if shape is None:
             # print('rm empty label')
             return
-        item = self.shapes_to_items[shape]
-        self.label_list.takeItem(self.label_list.row(item))
-        del self.shapes_to_items[shape]
-        del self.items_to_shapes[item]
-        self.update_combo_box()
+        try:
+            item = self.shapes_to_items[shape]
+            self.label_list.takeItem(self.label_list.row(item))
+            del self.shapes_to_items[shape]
+            del self.items_to_shapes[item]
+            self.update_combo_box()
+        except KeyError:
+            # Bỏ qua nếu shape không tồn tại trong danh sách
+            pass
 
     def load_labels(self, shapes):
+        # Xóa các label hiện tại
+        self.canvas.shapes = []
+        self.label_list.clear()
+        self.items_to_shapes.clear()
+        self.shapes_to_items.clear()
+        
         s = []
         for label, points, line_color, fill_color, difficult in shapes:
             shape = Shape(label=label)
             for x, y in points:
-
                 # Ensure the labels are within the bounds of the image. If not, fix them.
                 x, y, snapped = self.canvas.snap_point_to_canvas(x, y)
                 if snapped:
@@ -1396,6 +1405,11 @@ class MainWindow(QMainWindow, WindowMixin):
         self.file_list_widget.clear()
         self.m_img_list = self.scan_all_images(dir_path)
         self.img_count = len(self.m_img_list)
+        
+        # Load lại các label từ classes.txt trong thư mục mới
+        self.label_hist = []
+        self.load_predefined_classes(self.dir_name)
+        
         self.open_next_image()
         for imgPath in self.m_img_list:
             item = QListWidgetItem(imgPath)
@@ -1632,14 +1646,44 @@ class MainWindow(QMainWindow, WindowMixin):
         self.set_dirty()
 
     def load_predefined_classes(self, predef_classes_file):
-        if os.path.exists(predef_classes_file) is True:
-            with codecs.open(predef_classes_file, 'r', 'utf8') as f:
-                for line in f:
-                    line = line.strip()
-                    if self.label_hist is None:
-                        self.label_hist = [line]
-                    else:
-                        self.label_hist.append(line)
+        # Đầu tiên kiểm tra file classes.txt trong thư mục làm việc
+        if self.dir_name:
+            working_dir_classes = os.path.join(self.dir_name, "classes.txt")
+            try:
+                if os.path.exists(working_dir_classes):
+                    with codecs.open(working_dir_classes, 'r', 'utf8') as f:
+                        for line in f:
+                            line = line.strip()
+                            if self.label_hist is None:
+                                self.label_hist = [line]
+                            else:
+                                self.label_hist.append(line)
+                else:
+                    # Tự động tạo file classes.txt nếu chưa có
+                    try:
+                        with codecs.open(working_dir_classes, 'w', 'utf8') as f:
+                            pass  # Tạo file rỗng
+                    except PermissionError:
+                        print("Không thể tạo file classes.txt trong thư mục làm việc")
+                return
+            except PermissionError:
+                print("Không có quyền truy cập vào file classes.txt trong thư mục làm việc")
+
+        # Nếu không tìm thấy classes.txt trong thư mục làm việc, sử dụng file mặc định
+        try:
+            if os.path.exists(predef_classes_file) is True:
+                with codecs.open(predef_classes_file, 'r', 'utf8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if self.label_hist is None:
+                            self.label_hist = [line]
+                        else:
+                            self.label_hist.append(line)
+        except PermissionError:
+            print("Không có quyền truy cập vào file classes.txt mặc định")
+            # Khởi tạo label_hist là list rỗng nếu không thể đọc file
+            if self.label_hist is None:
+                self.label_hist = []
 
     def load_pascal_xml_by_filename(self, xml_path):
         if self.file_path is None:

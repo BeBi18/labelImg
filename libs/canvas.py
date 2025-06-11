@@ -467,7 +467,8 @@ class Canvas(QWidget):
         if self.selected_shape:
             shape = self.selected_shape
             self.un_highlight(shape)
-            self.shapes.remove(self.selected_shape)
+            if shape in self.shapes:  # Kiểm tra shape có tồn tại trong danh sách
+                self.shapes.remove(shape)
             self.selected_shape = None
             self.update()
             return shape

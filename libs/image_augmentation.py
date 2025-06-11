@@ -101,24 +101,26 @@ class AugmentationWidget(QWidget):
         rotate_layout.setSpacing(10)
         rotate_layout.setContentsMargins(10, 10, 10, 10)
         
-        self.rotate_cb = QCheckBox("Xoay ảnh")
+        self.rotate_cb = QCheckBox("Rotation")
         self.rotate_cb.setFixedWidth(CHECKBOX_WIDTH)
         
-        min_label = QLabel("Góc min:")
+        min_label = QLabel("Min:")
         min_label.setFixedWidth(LABEL_WIDTH)
         
         self.rotate_min = QSpinBox()
         self.rotate_min.setRange(-180, 180)
         self.rotate_min.setValue(-10)
         self.rotate_min.setFixedWidth(SPINBOX_WIDTH)
+        self.rotate_min.valueChanged.connect(lambda: self.check_min_max(self.rotate_min, self.rotate_max))
         
-        max_label = QLabel("Góc max:")
+        max_label = QLabel("Max:")
         max_label.setFixedWidth(LABEL_WIDTH)
         
         self.rotate_max = QSpinBox() 
         self.rotate_max.setRange(-180, 180)
         self.rotate_max.setValue(10)
         self.rotate_max.setFixedWidth(SPINBOX_WIDTH)
+        self.rotate_max.valueChanged.connect(lambda: self.check_min_max(self.rotate_min, self.rotate_max))
         
         self.preview_rotate_btn = QPushButton("Preview")
         self.preview_rotate_btn.setFixedWidth(BUTTON_WIDTH)
@@ -188,6 +190,7 @@ class AugmentationWidget(QWidget):
         self.bright_min.setDecimals(1)
         self.bright_min.setSingleStep(0.1)
         self.bright_min.setFixedWidth(SPINBOX_WIDTH)
+        self.bright_min.valueChanged.connect(lambda: self.check_min_max(self.bright_min, self.bright_max))
         
         bright_max_label = QLabel("Max:")
         bright_max_label.setFixedWidth(LABEL_WIDTH)
@@ -198,6 +201,7 @@ class AugmentationWidget(QWidget):
         self.bright_max.setDecimals(1)
         self.bright_max.setSingleStep(0.1)
         self.bright_max.setFixedWidth(SPINBOX_WIDTH)
+        self.bright_max.valueChanged.connect(lambda: self.check_min_max(self.bright_min, self.bright_max))
         
         self.preview_bright_btn = QPushButton("Preview")
         self.preview_bright_btn.setFixedWidth(BUTTON_WIDTH)
@@ -229,6 +233,7 @@ class AugmentationWidget(QWidget):
         self.blur_min.setRange(1, 10)
         self.blur_min.setValue(1)
         self.blur_min.setFixedWidth(SPINBOX_WIDTH)
+        self.blur_min.valueChanged.connect(lambda: self.check_min_max(self.blur_min, self.blur_max))
         
         blur_max_label = QLabel("Max:")
         blur_max_label.setFixedWidth(LABEL_WIDTH)
@@ -237,6 +242,7 @@ class AugmentationWidget(QWidget):
         self.blur_max.setRange(1, 10)
         self.blur_max.setValue(3)
         self.blur_max.setFixedWidth(SPINBOX_WIDTH)
+        self.blur_max.valueChanged.connect(lambda: self.check_min_max(self.blur_min, self.blur_max))
         
         self.preview_blur_btn = QPushButton("Preview")
         self.preview_blur_btn.setFixedWidth(BUTTON_WIDTH)
@@ -512,6 +518,17 @@ class AugmentationWidget(QWidget):
         # Hiển thị preview
         self.preview_dialog.show_images(img, img_min)
         self.preview_dialog.show_images(img, img_max)
+
+    def check_min_max(self, min_spinbox, max_spinbox):
+        """Kiểm tra và cập nhật giá trị min/max"""
+        min_val = min_spinbox.value()
+        max_val = max_spinbox.value()
+        
+        if min_val > max_val:
+            # Nếu min > max, đặt max = min
+            max_spinbox.setValue(min_val)
+            QMessageBox.warning(self, "Cảnh báo", 
+                              "Giá trị Min phải nhỏ hơn hoặc bằng Max!")
 
 def rotate_image(image, angle):
     """Xoay ảnh một góc angle độ"""
