@@ -3,10 +3,46 @@ import random
 import numpy as np
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                             QCheckBox, QSpinBox, QDoubleSpinBox, QPushButton,
-                            QFileDialog, QMessageBox, QGroupBox)
+                            QFileDialog, QMessageBox, QGroupBox, QDialog,
+                            QFrame, QGridLayout, QScrollArea)
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QImage
+from PyQt5.QtGui import QImage, QPixmap
 import cv2
+
+
+class PreviewDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Xem trước Augmentation")
+        self.setModal(True)
+        self.resize(800, 400)
+        
+        layout = QHBoxLayout()
+        
+        # Ảnh gốc
+        self.original_label = QLabel()
+        self.original_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.original_label)
+        
+        # Ảnh preview
+        self.preview_label = QLabel()
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.preview_label)
+        
+        self.setLayout(layout)
+
+    def show_images(self, original_img, preview_img):
+        # Chuyển đổi ảnh OpenCV sang QImage
+        height, width = original_img.shape[:2]
+        bytes_per_line = 3 * width
+        q_img_original = QImage(original_img.data, width, height, bytes_per_line, QImage.Format_RGB888)
+        q_img_preview = QImage(preview_img.data, width, height, bytes_per_line, QImage.Format_RGB888)
+        
+        # Hiển thị ảnh
+        self.original_label.setPixmap(QPixmap.fromImage(q_img_original).scaled(380, 380, Qt.KeepAspectRatio))
+        self.preview_label.setPixmap(QPixmap.fromImage(q_img_preview).scaled(380, 380, Qt.KeepAspectRatio))
+        
+        self.exec_()
 
 class AugmentationWidget(QWidget):
     """Widget chứa các tùy chọn augmentation"""
@@ -14,6 +50,7 @@ class AugmentationWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.main_window = self.get_main_window()
+        self.preview_dialog = PreviewDialog(self)
         self.init_ui()
         
     def get_main_window(self):
@@ -27,126 +64,266 @@ class AugmentationWidget(QWidget):
         
     def init_ui(self):
         # Layout chính
-        layout = QVBoxLayout()
-        layout.setSpacing(15)
-        layout.setContentsMargins(10, 10, 10, 10)
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        
+        # Scroll Area cho các kỹ thuật augmentation
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setMinimumHeight(400)
+        
+        # Widget chứa nội dung scroll
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+        scroll_layout.setSpacing(15)
+        scroll_layout.setContentsMargins(10, 10, 10, 10)
         
         # Group các kỹ thuật augmentation
-        aug_group = QGroupBox("Kỹ thuật augmentation")
+        aug_group = QGroupBox("Kỹ thuật Augmentation")
+        aug_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
         aug_layout = QVBoxLayout()
-        aug_layout.setSpacing(10)
+        aug_layout.setSpacing(15)
+        aug_layout.setContentsMargins(15, 20, 15, 15)
         
-        # Rotate
-        rotate_layout = QHBoxLayout()
+        # Định nghĩa độ rộng cố định cho các cột
+        CHECKBOX_WIDTH = 120
+        LABEL_WIDTH = 70
+        SPINBOX_WIDTH = 70
+        BUTTON_WIDTH = 80
+        
+        # === ROTATE ===
+        rotate_frame = QFrame()
+        rotate_frame.setFrameStyle(QFrame.StyledPanel)
+        rotate_layout = QHBoxLayout(rotate_frame)
         rotate_layout.setSpacing(10)
+        rotate_layout.setContentsMargins(10, 10, 10, 10)
+        
         self.rotate_cb = QCheckBox("Xoay ảnh")
+        self.rotate_cb.setFixedWidth(CHECKBOX_WIDTH)
+        
+        min_label = QLabel("Góc min:")
+        min_label.setFixedWidth(LABEL_WIDTH)
+        
         self.rotate_min = QSpinBox()
         self.rotate_min.setRange(-180, 180)
         self.rotate_min.setValue(-10)
+        self.rotate_min.setFixedWidth(SPINBOX_WIDTH)
+        
+        max_label = QLabel("Góc max:")
+        max_label.setFixedWidth(LABEL_WIDTH)
+        
         self.rotate_max = QSpinBox() 
         self.rotate_max.setRange(-180, 180)
         self.rotate_max.setValue(10)
+        self.rotate_max.setFixedWidth(SPINBOX_WIDTH)
+        
+        self.preview_rotate_btn = QPushButton("Preview")
+        self.preview_rotate_btn.setFixedWidth(BUTTON_WIDTH)
+        
         rotate_layout.addWidget(self.rotate_cb)
-        rotate_layout.addWidget(QLabel("Góc min:"))
+        rotate_layout.addWidget(min_label)
         rotate_layout.addWidget(self.rotate_min)
-        rotate_layout.addWidget(QLabel("Góc max:"))
+        rotate_layout.addWidget(max_label)
         rotate_layout.addWidget(self.rotate_max)
-        aug_layout.addLayout(rotate_layout)
+        rotate_layout.addStretch()
+        rotate_layout.addWidget(self.preview_rotate_btn)
         
-        # Flip
-        flip_layout = QHBoxLayout()
+        aug_layout.addWidget(rotate_frame)
+        
+        # === FLIP ===
+        flip_frame = QFrame()
+        flip_frame.setFrameStyle(QFrame.StyledPanel)
+        flip_layout = QHBoxLayout(flip_frame)
         flip_layout.setSpacing(10)
-        self.flip_cb = QCheckBox("Lật ảnh")
-        self.flip_h = QCheckBox("Lật ngang")
-        self.flip_h.setChecked(True)
-        self.flip_v = QCheckBox("Lật dọc")
-        flip_layout.addWidget(self.flip_cb)
-        flip_layout.addWidget(self.flip_h)
-        flip_layout.addWidget(self.flip_v)
-        aug_layout.addLayout(flip_layout)
+        flip_layout.setContentsMargins(10, 10, 10, 10)
         
-        # Brightness
-        bright_layout = QHBoxLayout()
+        self.flip_cb = QCheckBox("Flip")
+        self.flip_cb.setFixedWidth(CHECKBOX_WIDTH)
+        
+        horizontal_label = QLabel("Horizontal:")
+        horizontal_label.setFixedWidth(LABEL_WIDTH)
+        
+        self.flip_h = QCheckBox()
+        self.flip_h.setChecked(True)
+        self.flip_h.setFixedWidth(SPINBOX_WIDTH)
+        
+        vertical_label = QLabel("Vertical:")
+        vertical_label.setFixedWidth(LABEL_WIDTH)
+        
+        self.flip_v = QCheckBox()
+        self.flip_v.setFixedWidth(SPINBOX_WIDTH)
+        
+        self.preview_flip_btn = QPushButton("Preview")
+        self.preview_flip_btn.setFixedWidth(BUTTON_WIDTH)
+        
+        flip_layout.addWidget(self.flip_cb)
+        flip_layout.addWidget(horizontal_label)
+        flip_layout.addWidget(self.flip_h)
+        flip_layout.addWidget(vertical_label)
+        flip_layout.addWidget(self.flip_v)
+        flip_layout.addStretch()
+        flip_layout.addWidget(self.preview_flip_btn)
+        
+        aug_layout.addWidget(flip_frame)
+        
+        # === BRIGHTNESS ===
+        bright_frame = QFrame()
+        bright_frame.setFrameStyle(QFrame.StyledPanel)
+        bright_layout = QHBoxLayout(bright_frame)
         bright_layout.setSpacing(10)
-        self.bright_cb = QCheckBox("Độ sáng")
+        bright_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.bright_cb = QCheckBox("Brightness")
+        self.bright_cb.setFixedWidth(CHECKBOX_WIDTH)
+        
+        bright_min_label = QLabel("Min:")
+        bright_min_label.setFixedWidth(LABEL_WIDTH)
+        
         self.bright_min = QDoubleSpinBox()
         self.bright_min.setRange(0.5, 2.0)
         self.bright_min.setValue(0.8)
+        self.bright_min.setDecimals(1)
+        self.bright_min.setSingleStep(0.1)
+        self.bright_min.setFixedWidth(SPINBOX_WIDTH)
+        
+        bright_max_label = QLabel("Max:")
+        bright_max_label.setFixedWidth(LABEL_WIDTH)
+        
         self.bright_max = QDoubleSpinBox()
         self.bright_max.setRange(0.5, 2.0)
         self.bright_max.setValue(1.2)
-        bright_layout.addWidget(self.bright_cb)
-        bright_layout.addWidget(QLabel("Min:"))
-        bright_layout.addWidget(self.bright_min)
-        bright_layout.addWidget(QLabel("Max:"))
-        bright_layout.addWidget(self.bright_max)
-        aug_layout.addLayout(bright_layout)
+        self.bright_max.setDecimals(1)
+        self.bright_max.setSingleStep(0.1)
+        self.bright_max.setFixedWidth(SPINBOX_WIDTH)
         
-        # Blur
-        blur_layout = QHBoxLayout()
+        self.preview_bright_btn = QPushButton("Preview")
+        self.preview_bright_btn.setFixedWidth(BUTTON_WIDTH)
+        
+        bright_layout.addWidget(self.bright_cb)
+        bright_layout.addWidget(bright_min_label)
+        bright_layout.addWidget(self.bright_min)
+        bright_layout.addWidget(bright_max_label)
+        bright_layout.addWidget(self.bright_max)
+        bright_layout.addStretch()
+        bright_layout.addWidget(self.preview_bright_btn)
+        
+        aug_layout.addWidget(bright_frame)
+        
+        # === BLUR ===
+        blur_frame = QFrame()
+        blur_frame.setFrameStyle(QFrame.StyledPanel)
+        blur_layout = QHBoxLayout(blur_frame)
         blur_layout.setSpacing(10)
-        self.blur_cb = QCheckBox("Làm mờ")
+        blur_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.blur_cb = QCheckBox("Blur")
+        self.blur_cb.setFixedWidth(CHECKBOX_WIDTH)
+        
+        blur_min_label = QLabel("Min:")
+        blur_min_label.setFixedWidth(LABEL_WIDTH)
+        
         self.blur_min = QSpinBox()
         self.blur_min.setRange(1, 10)
         self.blur_min.setValue(1)
+        self.blur_min.setFixedWidth(SPINBOX_WIDTH)
+        
+        blur_max_label = QLabel("Max:")
+        blur_max_label.setFixedWidth(LABEL_WIDTH)
+        
         self.blur_max = QSpinBox()
         self.blur_max.setRange(1, 10)
         self.blur_max.setValue(3)
+        self.blur_max.setFixedWidth(SPINBOX_WIDTH)
+        
+        self.preview_blur_btn = QPushButton("Preview")
+        self.preview_blur_btn.setFixedWidth(BUTTON_WIDTH)
+        
         blur_layout.addWidget(self.blur_cb)
-        blur_layout.addWidget(QLabel("Min:"))
+        blur_layout.addWidget(blur_min_label)
         blur_layout.addWidget(self.blur_min)
-        blur_layout.addWidget(QLabel("Max:"))
+        blur_layout.addWidget(blur_max_label)
         blur_layout.addWidget(self.blur_max)
-        aug_layout.addLayout(blur_layout)
+        blur_layout.addStretch()
+        blur_layout.addWidget(self.preview_blur_btn)
+        
+        aug_layout.addWidget(blur_frame)
+        
+        # Thêm stretch để đẩy các phần tử lên trên
+        aug_layout.addStretch()
         
         aug_group.setLayout(aug_layout)
-        layout.addWidget(aug_group)
+        scroll_layout.addWidget(aug_group)
         
-        # Group cài đặt số lượng
-        settings_group = QGroupBox("Cài đặt số lượng")
-        settings_layout = QVBoxLayout()
-        settings_layout.setSpacing(10)
+        # Set scroll widget
+        scroll_area.setWidget(scroll_widget)
+        main_layout.addWidget(scroll_area)
+        
+        # === SETTINGS GROUP ===
+        settings_group = QGroupBox("Cài đặt Số lượng")
+        settings_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
+        settings_layout = QGridLayout()
+        settings_layout.setSpacing(15)
+        settings_layout.setContentsMargins(15, 20, 15, 15)
         
         # Số lượng ảnh mới
-        num_layout = QHBoxLayout()
-        num_layout.setSpacing(10)
-        num_layout.addWidget(QLabel("Số lượng ảnh mới:"))
+        settings_layout.addWidget(QLabel("Số lượng ảnh mới:"),        0, 0, 1, 1)
         self.num_images = QSpinBox()
         self.num_images.setRange(1, 100)
         self.num_images.setValue(5)
-        num_layout.addWidget(self.num_images)
-        num_layout.addStretch()
-        settings_layout.addLayout(num_layout)
+        self.num_images.setMinimumWidth(100)
+        settings_layout.addWidget(self.num_images,                    0, 1, 1, 1)
         
         # Phần trăm ảnh được chọn
+        settings_layout.addWidget(QLabel("Phần trăm ảnh được chọn:"), 1, 0, 1, 1)
         percent_layout = QHBoxLayout()
-        percent_layout.setSpacing(10)
-        percent_layout.addWidget(QLabel("Phần trăm ảnh được chọn:"))
         self.percent_images = QSpinBox()
         self.percent_images.setRange(1, 100)
         self.percent_images.setValue(50)
+        self.percent_images.setMinimumWidth(100)
         percent_layout.addWidget(self.percent_images)
         percent_layout.addWidget(QLabel("%"))
         percent_layout.addStretch()
-        settings_layout.addLayout(percent_layout)
+        settings_layout.addLayout(percent_layout,                     1, 1, 1, 2)
+        
+        # Thêm stretch cho cột cuối
+        settings_layout.setColumnStretch(2, 1)
         
         settings_group.setLayout(settings_layout)
-        layout.addWidget(settings_group)
+        main_layout.addWidget(settings_group)
         
-        # Nút thực hiện
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(10)
+        # === ACTION BUTTONS ===
+        btn_frame = QFrame()
+        btn_layout = QHBoxLayout(btn_frame)
+        btn_layout.setSpacing(15)
+        btn_layout.setContentsMargins(15, 10, 15, 10)
+        
         self.augment_btn = QPushButton("Augment Image")
+        self.augment_btn.setMinimumHeight(35)
+        self.augment_btn.setStyleSheet("QPushButton { font-weight: bold; }")
+        
         self.apply_all_btn = QPushButton("Apply All")
+        self.apply_all_btn.setMinimumHeight(35)
+        self.apply_all_btn.setStyleSheet("QPushButton { font-weight: bold; }")
+        
+        btn_layout.addStretch()
         btn_layout.addWidget(self.augment_btn)
         btn_layout.addWidget(self.apply_all_btn)
-        layout.addLayout(btn_layout)
+        btn_layout.addStretch()
         
-        self.setLayout(layout)
+        main_layout.addWidget(btn_frame)
+        
+        self.setLayout(main_layout)
         
         # Kết nối signals
         self.augment_btn.clicked.connect(self.on_augment_clicked)
         self.apply_all_btn.clicked.connect(self.on_apply_all_clicked)
+        self.preview_rotate_btn.clicked.connect(self.preview_rotate)
+        self.preview_flip_btn.clicked.connect(self.preview_flip)
+        self.preview_bright_btn.clicked.connect(self.preview_brightness)
+        self.preview_blur_btn.clicked.connect(self.preview_blur)
     
     def has_augmentation_enabled(self):
         """Kiểm tra xem có kỹ thuật augmentation nào được bật không"""
@@ -220,6 +397,121 @@ class AugmentationWidget(QWidget):
             
         QMessageBox.information(self, "Thông báo", 
                               f"Đã tạo {total_augmented} ảnh mới từ {num_images} ảnh gốc trong thư mục {save_dir}")
+
+    def get_current_image(self):
+        """Lấy ảnh hiện tại từ main window"""
+        if not self.main_window or not self.main_window.original_image:
+            return None
+            
+        # Chuyển QImage sang numpy array
+        image = self.main_window.original_image
+        width = image.width()
+        height = image.height()
+        
+        # Chuyển đổi QImage sang numpy array dựa trên format của ảnh
+        if image.format() == QImage.Format_RGB32:
+            ptr = image.bits()
+            ptr.setsize(height * width * 4)
+            arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 4))
+            arr = cv2.cvtColor(arr, cv2.COLOR_BGRA2RGB)
+        elif image.format() == QImage.Format_ARGB32:
+            ptr = image.bits()
+            ptr.setsize(height * width * 4)
+            arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 4))
+            arr = arr[:, :, [2, 1, 0]]  # A,R,G,B -> B,G,R
+        elif image.format() == QImage.Format_RGB888:
+            ptr = image.bits()
+            ptr.setsize(height * width * 3)
+            arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
+            arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+        else:
+            # Chuyển sang RGB nếu là grayscale
+            image = image.convertToFormat(QImage.Format_RGB888)
+            ptr = image.bits()
+            ptr.setsize(height * width * 3)
+            arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
+            arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+            
+        return arr
+
+    def preview_rotate(self):
+        """Xem trước hiệu ứng xoay"""
+        if not self.rotate_cb.isChecked():
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn xoay ảnh!")
+            return
+            
+        img = self.get_current_image()
+        if img is None:
+            QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
+            return
+            
+        # Tạo ảnh preview với góc min và max
+        img_min = rotate_image(img.copy(), self.rotate_min.value())
+        img_max = rotate_image(img.copy(), self.rotate_max.value())
+        
+        # Hiển thị preview
+        self.preview_dialog.show_images(img, img_min)
+        self.preview_dialog.show_images(img, img_max)
+
+    def preview_flip(self):
+        """Xem trước hiệu ứng lật"""
+        if not self.flip_cb.isChecked():
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn lật ảnh!")
+            return
+            
+        img = self.get_current_image()
+        if img is None:
+            QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
+            return
+            
+        # Tạo ảnh preview với các tùy chọn lật
+        if self.flip_h.isChecked():
+            img_h = flip_image(img.copy(), horizontal=True)
+            self.preview_dialog.show_images(img, img_h)
+            
+        if self.flip_v.isChecked():
+            img_v = flip_image(img.copy(), vertical=True)
+            self.preview_dialog.show_images(img, img_v)
+
+    def preview_brightness(self):
+        """Xem trước hiệu ứng độ sáng"""
+        if not self.bright_cb.isChecked():
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn độ sáng!")
+            return
+            
+        img = self.get_current_image()
+        if img is None:
+            QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
+            return
+            
+        # Tạo ảnh preview với độ sáng min và max
+        img_min = adjust_brightness(img.copy(), self.bright_min.value())
+        img_max = adjust_brightness(img.copy(), self.bright_max.value())
+        
+        # Hiển thị preview
+        self.preview_dialog.show_images(img, img_min)
+        self.preview_dialog.show_images(img, img_max)
+
+    def preview_blur(self):
+        """Xem trước hiệu ứng làm mờ"""
+        if not self.blur_cb.isChecked():
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn làm mờ!")
+            return
+            
+        img = self.get_current_image()
+        if img is None:
+            QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
+            return
+            
+        # Tạo ảnh preview với độ mờ min và max
+        kernel_min = self.blur_min.value() * 2 + 1
+        kernel_max = self.blur_max.value() * 2 + 1
+        img_min = apply_blur(img.copy(), kernel_min)
+        img_max = apply_blur(img.copy(), kernel_max)
+        
+        # Hiển thị preview
+        self.preview_dialog.show_images(img, img_min)
+        self.preview_dialog.show_images(img, img_max)
 
 def rotate_image(image, angle):
     """Xoay ảnh một góc angle độ"""
