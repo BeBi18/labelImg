@@ -134,6 +134,7 @@ class MainWindow(QMainWindow, WindowMixin):
         # Create a widget for using default label
         self.use_default_label_checkbox = QCheckBox(get_str('useDefaultLabel'))
         self.use_default_label_checkbox.setChecked(False)
+        self.use_default_label_checkbox.stateChanged.connect(self.toggle_default_label)
         self.default_label_combo_box = DefaultLabelComboBox(self,items=self.label_hist)
 
         use_default_label_qhbox_layout = QHBoxLayout()
@@ -963,7 +964,11 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.label_list.item(i).setCheckState(2)
 
     def default_label_combo_selection_changed(self, index):
-        self.default_label=self.label_hist[index]
+        """Xử lý khi chọn class trong combobox"""
+        if index >= 0 and self.label_hist and index < len(self.label_hist):
+            self.default_label = self.label_hist[index]
+        else:
+            self.default_label = None
 
     def label_selection_changed(self):
         item = self.current_item()
@@ -1178,6 +1183,7 @@ class MainWindow(QMainWindow, WindowMixin):
             self.status("Loaded %s" % os.path.basename(unicode_file_path))
             self.image = image
             self.original_image = image.copy()
+            self.processed_image = None  # Reset processed image
             self.file_path = unicode_file_path
             self.canvas.load_pixmap(QPixmap.fromImage(image))
             
@@ -1509,12 +1515,30 @@ class MainWindow(QMainWindow, WindowMixin):
                 image_file_name = os.path.basename(self.file_path)
                 saved_file_name = os.path.splitext(image_file_name)[0]
                 saved_path = os.path.join(ustr(self.default_save_dir), saved_file_name)
+                
+                # Nếu có ảnh đã xử lý, lưu ảnh đã xử lý
+                if hasattr(self, 'processed_image') and self.processed_image is not None and not self.processed_image.isNull():
+                    # Tạo tên file không trùng lặp cho ảnh đã xử lý
+                    processed_image_path = self.get_unique_filename(saved_path + '_processed.jpg')
+                    self.processed_image.save(processed_image_path)
+                    # Cập nhật đường dẫn file để lưu nhãn
+                    saved_path = os.path.splitext(processed_image_path)[0]
+                
                 self._save_file(saved_path)
         else:
             image_file_dir = os.path.dirname(self.file_path)
             image_file_name = os.path.basename(self.file_path)
             saved_file_name = os.path.splitext(image_file_name)[0]
             saved_path = os.path.join(image_file_dir, saved_file_name)
+            
+            # Nếu có ảnh đã xử lý, lưu ảnh đã xử lý
+            if hasattr(self, 'processed_image') and self.processed_image is not None and not self.processed_image.isNull():
+                # Tạo tên file không trùng lặp cho ảnh đã xử lý
+                processed_image_path = self.get_unique_filename(saved_path + '_processed.jpg')
+                self.processed_image.save(processed_image_path)
+                # Cập nhật đường dẫn file để lưu nhãn
+                saved_path = os.path.splitext(processed_image_path)[0]
+            
             self._save_file(saved_path if self.label_file
                             else self.save_file_dialog(remove_ext=False))
 
@@ -1740,8 +1764,67 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def update_processed_image(self, qimage):
         """Cập nhật ảnh đã xử lý lên canvas"""
+        # Lưu trữ ảnh đã xử lý
+        self.processed_image = qimage.copy()
+        
+        # Lưu lại các nhãn hiện tại
+        current_shapes = self.canvas.shapes.copy()
+        
+        # Cập nhật ảnh mới lên canvas
         self.canvas.load_pixmap(QPixmap.fromImage(qimage))
+        
+        # Khôi phục lại các nhãn đã được điều chỉnh
+        self.canvas.shapes = current_shapes
+        
+        # Cập nhật lại canvas
         self.paint_canvas()
+        
+        # Cập nhật lại danh sách nhãn
+        self.update_label_list()
+        
+        # Đánh dấu là có thay đổi để cho phép save
+        self.set_dirty()
+
+    def save_processed_image(self):
+        """Lưu ảnh đã xử lý"""
+        if not hasattr(self, 'processed_image') or self.processed_image is None or self.processed_image.isNull():
+            QMessageBox.warning(self, "Cảnh báo", "Không có ảnh đã xử lý để lưu!")
+            return
+            
+        if self.default_save_dir is not None and len(ustr(self.default_save_dir)):
+            # Tạo tên file không trùng lặp
+            base_name = os.path.splitext(os.path.basename(self.file_path))[0]
+            save_path = os.path.join(ustr(self.default_save_dir), f"{base_name}_processed.jpg")
+            save_path = self.get_unique_filename(save_path)
+            
+            # Lưu ảnh
+            self.processed_image.save(save_path)
+            
+            # Nếu có nhãn, lưu cả nhãn
+            if self.has_labels():
+                label_path = os.path.splitext(save_path)[0] + LabelFile.suffix
+                self._save_file(label_path)
+                
+            QMessageBox.information(self, "Thông báo", f"Đã lưu ảnh đã xử lý tại: {save_path}")
+        else:
+            # Nếu chưa có thư mục lưu, hiện dialog chọn thư mục
+            self.change_save_dir_dialog()
+            if self.default_save_dir:
+                self.save_processed_image()  # Thử lưu lại sau khi chọn thư mục
+
+    def update_label_list(self):
+        """Cập nhật lại danh sách nhãn"""
+        # Xóa danh sách nhãn cũ
+        self.label_list.clear()
+        self.items_to_shapes.clear()
+        self.shapes_to_items.clear()
+        
+        # Thêm lại các nhãn
+        for shape in self.canvas.shapes:
+            self.add_label(shape)
+            
+        # Cập nhật combobox
+        self.update_combo_box()
 
     def has_labels(self):
         """Kiểm tra xem ảnh hiện tại đã có nhãn chưa"""
@@ -1960,6 +2043,36 @@ class MainWindow(QMainWindow, WindowMixin):
             
         QMessageBox.information(self, "Thông báo", 
                               "Đã hoàn thành augmentation cho tất cả ảnh")
+
+    def toggle_default_label(self, state):
+        """Xử lý khi checkbox default label thay đổi trạng thái"""
+        if state == Qt.Checked:
+            # Khi tích vào checkbox, load lại classes từ predefined_classes.txt
+            if self.dir_name:
+                # Nếu đang mở thư mục, load từ classes.txt trong thư mục đó
+                classes_file = os.path.join(self.dir_name, "classes.txt")
+            else:
+                # Nếu không, load từ file mặc định
+                classes_file = os.path.join(os.path.dirname(__file__), "data", "predefined_classes.txt")
+            
+            # Load lại classes
+            self.label_hist = []
+            self.load_predefined_classes(classes_file)
+            
+            # Cập nhật combobox
+            self.default_label_combo_box.cb.clear()
+            if self.label_hist:  # Chỉ thêm items nếu có class
+                self.default_label_combo_box.cb.addItems(self.label_hist)
+                # Set default label là class đầu tiên
+                self.default_label = self.label_hist[0]
+                self.default_label_combo_box.cb.setCurrentText(self.default_label)
+        else:
+            # Khi bỏ tích, xóa các class mặc định
+            self.label_hist = []
+            self.default_label_combo_box.cb.clear()
+            self.default_label = None
+            # Thêm một item rỗng vào combobox để tránh lỗi index
+            self.default_label_combo_box.cb.addItem("")
 
 def inverted(color):
     return QColor(*[255 - v for v in color.getRgb()])
