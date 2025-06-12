@@ -1766,6 +1766,21 @@ class MainWindow(QMainWindow, WindowMixin):
         }
         return params
         
+    def get_unique_filename(self, base_path):
+        """Tạo tên file không trùng lặp bằng cách thêm số thứ tự vào cuối"""
+        if not os.path.exists(base_path):
+            return base_path
+            
+        directory = os.path.dirname(base_path)
+        filename = os.path.basename(base_path)
+        name, ext = os.path.splitext(filename)
+        
+        counter = 1
+        while os.path.exists(os.path.join(directory, f"{name} ({counter}){ext}")):
+            counter += 1
+            
+        return os.path.join(directory, f"{name} ({counter}){ext}")
+
     def augment_current_image(self, save_dir):
         """Augment ảnh hiện tại và lưu vào thư mục save_dir"""
         if not self.has_labels():
@@ -1873,8 +1888,11 @@ class MainWindow(QMainWindow, WindowMixin):
             # Augment ảnh
             augmented = augment_image(arr, params)
             
-            # Lưu ảnh
+            # Tạo tên file không trùng lặp
             save_path = os.path.join(save_dir, f"{base_name}_aug_{i}.jpg")
+            save_path = self.get_unique_filename(save_path)
+            
+            # Lưu ảnh
             cv2.imwrite(save_path, augmented)
             
             # Cập nhật và lưu nhãn
@@ -1898,8 +1916,9 @@ class MainWindow(QMainWindow, WindowMixin):
                 }
                 shapes.append(new_shape)
             
-            # Lưu file nhãn theo định dạng hiện tại
+            # Tạo tên file nhãn không trùng lặp
             label_path = os.path.splitext(save_path)[0] + LabelFile.suffix
+            label_path = self.get_unique_filename(label_path)
             
             # Tạo label file mới
             label_file = LabelFile()

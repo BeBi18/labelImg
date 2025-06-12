@@ -623,6 +623,9 @@ def augment_image(image, params):
         elif method == 'flip':
             h_flip = random.random() < 0.5 if params.get('flip_h', False) else False
             v_flip = random.random() < 0.5 if params.get('flip_v', False) else False
+            while h_flip == False and v_flip == False:
+                h_flip = random.random() < 0.5 if params.get('flip_h', False) else False
+                v_flip = random.random() < 0.5 if params.get('flip_v', False) else False
             augmented = flip_image(augmented, h_flip, v_flip)
             params['flip_h'] = h_flip  # Lưu trạng thái flip để sử dụng cho bbox
             params['flip_v'] = v_flip
@@ -650,16 +653,30 @@ def update_bbox(bbox, image_shape, params):
             center = (width/2, height/2)
             rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
             
-            # Chuyển đổi tọa độ
-            points = np.array([[x1,y1], [x2,y1], [x2,y2], [x1,y2]])
-            ones = np.ones(shape=(len(points), 1))
-            points_ones = np.hstack([points, ones])
-            transformed_points = rotation_matrix.dot(points_ones.T).T
+            # Lưu kích thước bbox gốc
+            original_bbox_width = x2 - x1
+            original_bbox_height = y2 - y1
             
-            x1 = min(transformed_points[:,0])
-            y1 = min(transformed_points[:,1])
-            x2 = max(transformed_points[:,0])
-            y2 = max(transformed_points[:,1])
+            # Transform tâm của bbox
+            bbox_center_x = (x1 + x2) / 2
+            bbox_center_y = (y1 + y2) / 2
+            center_point = np.array([[bbox_center_x, bbox_center_y, 1]])
+            transformed_center = rotation_matrix.dot(center_point.T).T[0]
+            
+            # Tạo bbox mới với cùng kích thước nhưng tâm đã xoay
+            new_center_x = transformed_center[0]
+            new_center_y = transformed_center[1]
+            
+            x1 = new_center_x - original_bbox_width / 2
+            y1 = new_center_y - original_bbox_height / 2
+            x2 = new_center_x + original_bbox_width / 2
+            y2 = new_center_y + original_bbox_height / 2
+            
+            # Clamp về kích thước ảnh
+            x1 = max(0, min(x1, width))
+            y1 = max(0, min(y1, height))
+            x2 = max(0, min(x2, width))
+            y2 = max(0, min(y2, height))
             
         elif method == 'flip':
             if params.get('flip_h', False):
