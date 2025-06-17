@@ -4,10 +4,13 @@ import numpy as np
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                             QCheckBox, QSpinBox, QDoubleSpinBox, QPushButton,
                             QFileDialog, QMessageBox, QGroupBox, QDialog,
-                            QFrame, QGridLayout, QScrollArea)
+                            QFrame, QGridLayout, QScrollArea, QComboBox)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap
 import cv2
+import torchvision.transforms.functional as F
+import torchvision.transforms as T
+import torch
 
 
 class PreviewDialog(QDialog):
@@ -185,8 +188,8 @@ class AugmentationWidget(QWidget):
         bright_min_label.setFixedWidth(LABEL_WIDTH)
         
         self.bright_min = QDoubleSpinBox()
-        self.bright_min.setRange(0.5, 2.0)
-        self.bright_min.setValue(0.8)
+        self.bright_min.setRange(-99, 99)
+        self.bright_min.setValue(0.5)
         self.bright_min.setDecimals(1)
         self.bright_min.setSingleStep(0.1)
         self.bright_min.setFixedWidth(SPINBOX_WIDTH)
@@ -196,7 +199,7 @@ class AugmentationWidget(QWidget):
         bright_max_label.setFixedWidth(LABEL_WIDTH)
         
         self.bright_max = QDoubleSpinBox()
-        self.bright_max.setRange(0.5, 2.0)
+        self.bright_max.setRange(-99, 99)
         self.bright_max.setValue(1.2)
         self.bright_max.setDecimals(1)
         self.bright_max.setSingleStep(0.1)
@@ -226,36 +229,225 @@ class AugmentationWidget(QWidget):
         self.blur_cb = QCheckBox("Blur")
         self.blur_cb.setFixedWidth(CHECKBOX_WIDTH)
         
-        blur_min_label = QLabel("Min:")
-        blur_min_label.setFixedWidth(LABEL_WIDTH)
+        blur_label = QLabel("KernelSize:")
+        blur_label.setFixedWidth(LABEL_WIDTH)
         
-        self.blur_min = QSpinBox()
-        self.blur_min.setRange(1, 10)
-        self.blur_min.setValue(1)
-        self.blur_min.setFixedWidth(SPINBOX_WIDTH)
-        self.blur_min.valueChanged.connect(lambda: self.check_min_max(self.blur_min, self.blur_max))
-        
-        blur_max_label = QLabel("Max:")
-        blur_max_label.setFixedWidth(LABEL_WIDTH)
-        
-        self.blur_max = QSpinBox()
-        self.blur_max.setRange(1, 10)
-        self.blur_max.setValue(3)
-        self.blur_max.setFixedWidth(SPINBOX_WIDTH)
-        self.blur_max.valueChanged.connect(lambda: self.check_min_max(self.blur_min, self.blur_max))
+        self.blur_size = QSpinBox()
+        self.blur_size.setRange(1, 100)
+        self.blur_size.setValue(3)
+        self.blur_size.setFixedWidth(SPINBOX_WIDTH)
         
         self.preview_blur_btn = QPushButton("Preview")
         self.preview_blur_btn.setFixedWidth(BUTTON_WIDTH)
         
         blur_layout.addWidget(self.blur_cb)
-        blur_layout.addWidget(blur_min_label)
-        blur_layout.addWidget(self.blur_min)
-        blur_layout.addWidget(blur_max_label)
-        blur_layout.addWidget(self.blur_max)
+        blur_layout.addWidget(blur_label)
+        blur_layout.addWidget(self.blur_size)
         blur_layout.addStretch()
         blur_layout.addWidget(self.preview_blur_btn)
         
         aug_layout.addWidget(blur_frame)
+        
+        # === HUE ===
+        hue_frame = QFrame()
+        hue_frame.setFrameStyle(QFrame.StyledPanel)
+        hue_layout = QHBoxLayout(hue_frame)
+        hue_layout.setSpacing(10)
+        hue_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.hue_cb = QCheckBox("Hue")
+        self.hue_cb.setFixedWidth(CHECKBOX_WIDTH)
+        
+        hue_min_label = QLabel("Min:")
+        hue_min_label.setFixedWidth(LABEL_WIDTH)
+        
+        self.hue_min = QSpinBox()
+        self.hue_min.setRange(-180, 180)
+        self.hue_min.setValue(-10)
+        self.hue_min.setFixedWidth(SPINBOX_WIDTH)
+        self.hue_min.valueChanged.connect(lambda: self.check_min_max(self.hue_min, self.hue_max))
+        
+        hue_max_label = QLabel("Max:")
+        hue_max_label.setFixedWidth(LABEL_WIDTH)
+        
+        self.hue_max = QSpinBox()
+        self.hue_max.setRange(-180, 180)
+        self.hue_max.setValue(10)
+        self.hue_max.setFixedWidth(SPINBOX_WIDTH)                                                                                           
+        self.hue_max.valueChanged.connect(lambda: self.check_min_max(self.hue_min, self.hue_max))
+        
+        self.preview_hue_btn = QPushButton("Preview")
+        self.preview_hue_btn.setFixedWidth(BUTTON_WIDTH)
+        
+        hue_layout.addWidget(self.hue_cb)
+        hue_layout.addWidget(hue_min_label)
+        hue_layout.addWidget(self.hue_min)
+        hue_layout.addWidget(hue_max_label)
+        hue_layout.addWidget(self.hue_max)
+        hue_layout.addStretch()
+        hue_layout.addWidget(self.preview_hue_btn)
+        
+        aug_layout.addWidget(hue_frame)
+        
+        # === SATURATION ===
+        sat_frame = QFrame()
+        sat_frame.setFrameStyle(QFrame.StyledPanel)
+        sat_layout = QHBoxLayout(sat_frame)
+        sat_layout.setSpacing(10)
+        sat_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.sat_cb = QCheckBox("Saturation")
+        self.sat_cb.setFixedWidth(CHECKBOX_WIDTH)
+        
+        sat_min_label = QLabel("Min:")
+        sat_min_label.setFixedWidth(LABEL_WIDTH)
+        
+        self.sat_min = QDoubleSpinBox()
+        self.sat_min.setRange(0, 99)
+        self.sat_min.setValue(1)
+        self.sat_min.setDecimals(1)
+        self.sat_min.setSingleStep(1)
+        self.sat_min.setFixedWidth(SPINBOX_WIDTH)
+        self.sat_min.valueChanged.connect(lambda: self.check_min_max(self.sat_min, self.sat_max))
+        
+        sat_max_label = QLabel("Max:")
+        sat_max_label.setFixedWidth(LABEL_WIDTH)
+        
+        self.sat_max = QDoubleSpinBox()
+        self.sat_max.setRange(0, 99)
+        self.sat_max.setValue(2)
+        self.sat_max.setDecimals(1)
+        self.sat_max.setSingleStep(1)
+        self.sat_max.setFixedWidth(SPINBOX_WIDTH)
+        self.sat_max.valueChanged.connect(lambda: self.check_min_max(self.sat_min, self.sat_max))
+        
+        self.preview_sat_btn = QPushButton("Preview")
+        self.preview_sat_btn.setFixedWidth(BUTTON_WIDTH)
+        
+        sat_layout.addWidget(self.sat_cb)
+        sat_layout.addWidget(sat_min_label)
+        sat_layout.addWidget(self.sat_min)
+        sat_layout.addWidget(sat_max_label)
+        sat_layout.addWidget(self.sat_max)
+        sat_layout.addStretch()
+        sat_layout.addWidget(self.preview_sat_btn)
+        
+        aug_layout.addWidget(sat_frame)
+        
+        # === EXPOSURE ===
+        exp_frame = QFrame()
+        exp_frame.setFrameStyle(QFrame.StyledPanel)
+        exp_layout = QHBoxLayout(exp_frame)
+        exp_layout.setSpacing(10)
+        exp_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.exp_cb = QCheckBox("Exposure")
+        self.exp_cb.setFixedWidth(CHECKBOX_WIDTH)
+        
+        exp_min_label = QLabel("Min:")
+        exp_min_label.setFixedWidth(LABEL_WIDTH)
+        
+        self.exp_min = QSpinBox()
+        self.exp_min.setRange(-99, 99)
+        self.exp_min.setValue(-20)
+        self.exp_min.setFixedWidth(SPINBOX_WIDTH)
+        self.exp_min.valueChanged.connect(lambda: self.check_min_max(self.exp_min, self.exp_max))
+        
+        exp_max_label = QLabel("Max:")
+        exp_max_label.setFixedWidth(LABEL_WIDTH)
+        
+        self.exp_max = QSpinBox()
+        self.exp_max.setRange(-99, 99)
+        self.exp_max.setValue(20)
+        self.exp_max.setFixedWidth(SPINBOX_WIDTH)
+        self.exp_max.valueChanged.connect(lambda: self.check_min_max(self.exp_min, self.exp_max))
+        
+        self.preview_exp_btn = QPushButton("Preview")
+        self.preview_exp_btn.setFixedWidth(BUTTON_WIDTH)
+        
+        exp_layout.addWidget(self.exp_cb)
+        exp_layout.addWidget(exp_min_label)
+        exp_layout.addWidget(self.exp_min)
+        exp_layout.addWidget(exp_max_label)
+        exp_layout.addWidget(self.exp_max)
+        exp_layout.addStretch()
+        exp_layout.addWidget(self.preview_exp_btn)
+        
+        aug_layout.addWidget(exp_frame)
+        
+        
+        # === GRAYSCALE ===
+        gray_frame = QFrame()
+        gray_frame.setFrameStyle(QFrame.StyledPanel)
+        gray_layout = QHBoxLayout(gray_frame)
+        gray_layout.setSpacing(10)
+        gray_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.gray_cb = QCheckBox("Grayscale")
+        self.gray_cb.setFixedWidth(CHECKBOX_WIDTH)
+        
+        self.preview_gray_btn = QPushButton("Preview")
+        self.preview_gray_btn.setFixedWidth(BUTTON_WIDTH)
+        
+        gray_layout.addWidget(self.gray_cb)
+        gray_layout.addStretch()
+        gray_layout.addWidget(self.preview_gray_btn)
+        
+        aug_layout.addWidget(gray_frame)
+
+        # === NOISE ===
+        noise_frame = QFrame()
+        noise_frame.setFrameStyle(QFrame.StyledPanel)
+        noise_layout = QHBoxLayout(noise_frame)
+        noise_layout.setSpacing(10)
+        noise_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.noise_cb = QCheckBox("Noise")
+        self.noise_cb.setFixedWidth(CHECKBOX_WIDTH)
+        
+        self.noise_type = QComboBox()
+        self.noise_type.addItems(['Gaussian', 'Salt & Pepper'])
+        self.noise_type.setFixedWidth(120)
+        
+        self.preview_noise_btn = QPushButton("Preview")
+        self.preview_noise_btn.setFixedWidth(BUTTON_WIDTH)
+        
+        noise_layout.addWidget(self.noise_cb)
+        noise_layout.addWidget(self.noise_type)
+        noise_layout.addStretch()
+        noise_layout.addWidget(self.preview_noise_btn)
+        
+        aug_layout.addWidget(noise_frame)
+        
+        # === ROTATE 90 ===
+        rotate90_frame = QFrame()
+        rotate90_frame.setFrameStyle(QFrame.StyledPanel)
+        rotate90_layout = QHBoxLayout(rotate90_frame)
+        rotate90_layout.setSpacing(10)
+        rotate90_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.rotate90_cb = QCheckBox("Rotate 90°")
+        self.rotate90_cb.setFixedWidth(CHECKBOX_WIDTH)
+        
+        # Thay thế combobox bằng các checkbox
+        self.rotate90_clockwise = QCheckBox("Clockwise")
+        self.rotate90_counter = QCheckBox("Counter-clockwise")
+        self.rotate90_upside = QCheckBox("Upside-down")
+        
+        # Đặt giá trị mặc định cho clockwise
+        self.rotate90_clockwise.setChecked(True)
+        
+        self.preview_rotate90_btn = QPushButton("Preview")
+        self.preview_rotate90_btn.setFixedWidth(BUTTON_WIDTH)
+        
+        rotate90_layout.addWidget(self.rotate90_cb)
+        rotate90_layout.addWidget(self.rotate90_clockwise)
+        rotate90_layout.addWidget(self.rotate90_counter)
+        rotate90_layout.addWidget(self.rotate90_upside)
+        rotate90_layout.addStretch()
+        rotate90_layout.addWidget(self.preview_rotate90_btn)
+        
+        aug_layout.addWidget(rotate90_frame)
         
         # Thêm stretch để đẩy các phần tử lên trên
         aug_layout.addStretch()
@@ -330,13 +522,25 @@ class AugmentationWidget(QWidget):
         self.preview_flip_btn.clicked.connect(self.preview_flip)
         self.preview_bright_btn.clicked.connect(self.preview_brightness)
         self.preview_blur_btn.clicked.connect(self.preview_blur)
+        self.preview_hue_btn.clicked.connect(self.preview_hue)
+        self.preview_sat_btn.clicked.connect(self.preview_saturation)
+        self.preview_exp_btn.clicked.connect(self.preview_exposure)
+        self.preview_gray_btn.clicked.connect(self.preview_grayscale)
+        self.preview_noise_btn.clicked.connect(self.preview_noise)
+        self.preview_rotate90_btn.clicked.connect(self.preview_rotate90)
     
     def has_augmentation_enabled(self):
         """Kiểm tra xem có kỹ thuật augmentation nào được bật không"""
         return (self.rotate_cb.isChecked() or 
                 self.flip_cb.isChecked() or 
                 self.bright_cb.isChecked() or 
-                self.blur_cb.isChecked())
+                self.blur_cb.isChecked() or
+                self.hue_cb.isChecked() or
+                self.sat_cb.isChecked() or
+                self.exp_cb.isChecked() or
+                self.gray_cb.isChecked() or
+                self.noise_cb.isChecked() or
+                self.rotate90_cb.isChecked())
         
     def on_augment_clicked(self):
         """Xử lý khi click nút Augment Image"""
@@ -509,15 +713,134 @@ class AugmentationWidget(QWidget):
             QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
             return
             
-        # Tạo ảnh preview với độ mờ min và max
-        kernel_min = self.blur_min.value() * 2 + 1
-        kernel_max = self.blur_max.value() * 2 + 1
-        img_min = apply_blur(img.copy(), kernel_min)
-        img_max = apply_blur(img.copy(), kernel_max)
+        # Tạo ảnh preview với kernel size đã chọn
+        kernel_size = self.blur_size.value() * 2 + 1  # Đảm bảo kernel size là số lẻ
+        img_blurred = apply_blur(img.copy(), kernel_size)
+        
+        # Hiển thị preview
+        self.preview_dialog.show_images(img, img_blurred)
+
+    def preview_hue(self):
+        """Xem trước hiệu ứng điều chỉnh màu sắc (hue)"""
+        if not self.hue_cb.isChecked():
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn điều chỉnh màu sắc!")
+            return
+            
+        img = self.get_current_image()
+        if img is None:
+            QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
+            return
+            
+        # Tạo ảnh preview với độ min và max
+        img_min = adjust_hue(img.copy(), self.hue_min.value())
+        img_max = adjust_hue(img.copy(), self.hue_max.value())
         
         # Hiển thị preview
         self.preview_dialog.show_images(img, img_min)
         self.preview_dialog.show_images(img, img_max)
+
+    def preview_saturation(self):
+        """Xem trước hiệu ứng điều chỉnh độ bão hòa màu"""
+        if not self.sat_cb.isChecked():
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn điều chỉnh độ bão hòa màu!")
+            return
+            
+        img = self.get_current_image()
+        if img is None:
+            QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
+            return
+            
+        # Tạo ảnh preview với độ min và max
+        img_min = adjust_saturation(img.copy(), self.sat_min.value())
+        img_max = adjust_saturation(img.copy(), self.sat_max.value())
+        
+        # Hiển thị preview
+        self.preview_dialog.show_images(img, img_min)
+        self.preview_dialog.show_images(img, img_max)
+
+    def preview_exposure(self):
+        """Xem trước hiệu ứng điều chỉnh độ phơi sáng"""
+        if not self.exp_cb.isChecked():
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn điều chỉnh độ phơi sáng!")
+            return
+            
+        img = self.get_current_image()
+        if img is None:
+            QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
+            return
+            
+        # Tạo ảnh preview với độ min và max
+        img_min = adjust_exposure(img.copy(), self.exp_min.value())
+        img_max = adjust_exposure(img.copy(), self.exp_max.value())
+        
+        # Hiển thị preview
+        self.preview_dialog.show_images(img, img_min)
+        self.preview_dialog.show_images(img, img_max)
+
+    def preview_grayscale(self):
+        """Xem trước hiệu ứng chuyển ảnh sang grayscale"""
+        if not self.gray_cb.isChecked():
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn chuyển ảnh sang grayscale!")
+            return
+            
+        img = self.get_current_image()
+        if img is None:
+            QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
+            return
+            
+        # Tạo ảnh preview với độ grayscale
+        img_gray = convert_to_grayscale(img.copy())
+        
+        # Hiển thị preview
+        self.preview_dialog.show_images(img, img_gray)
+
+    def preview_noise(self):
+        """Xem trước hiệu ứng nhiễu"""
+        if not self.noise_cb.isChecked():
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn nhiễu!")
+            return
+            
+        img = self.get_current_image()
+        if img is None:
+            QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
+            return
+            
+        # Tạo ảnh preview với độ nhiễu min và max
+        img_min = add_noise(img.copy(), self.noise_type.currentText())
+        img_max = add_noise(img.copy(), self.noise_type.currentText())
+        
+        # Hiển thị preview
+        self.preview_dialog.show_images(img, img_min)
+        self.preview_dialog.show_images(img, img_max)
+
+    def preview_rotate90(self):
+        """Xem trước hiệu ứng xoay 90 độ"""
+        if not self.rotate90_cb.isChecked():
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn xoay 90 độ!")
+            return
+            
+        img = self.get_current_image()
+        if img is None:
+            QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
+            return
+            
+        # Kiểm tra xem có checkbox nào được chọn không
+        if not (self.rotate90_clockwise.isChecked() or 
+                self.rotate90_counter.isChecked() or 
+                self.rotate90_upside.isChecked()):
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng chọn ít nhất một hướng xoay!")
+            return
+            
+        # Tạo ảnh preview với hướng xoay đầu tiên được chọn
+        if self.rotate90_clockwise.isChecked():
+            img_rotated = rotate_90(img.copy(), 'clockwise')
+            self.preview_dialog.show_images(img, img_rotated)
+        if self.rotate90_counter.isChecked():
+            img_rotated = rotate_90(img.copy(), 'counter-clockwise')
+            self.preview_dialog.show_images(img, img_rotated)
+        if self.rotate90_upside.isChecked():
+            img_rotated = rotate_90(img.copy(), 'upside-down')
+            self.preview_dialog.show_images(img, img_rotated)
 
     def check_min_max(self, min_spinbox, max_spinbox):
         """Kiểm tra và cập nhật giá trị min/max"""
@@ -548,18 +871,176 @@ def flip_image(image, horizontal=False, vertical=False):
 
 def adjust_brightness(image, factor):
     """Điều chỉnh độ sáng của ảnh"""
-    return cv2.convertScaleAbs(image, alpha=factor, beta=0)
+    # Method 3
+    # Chuyển numpy array thành tensor
+    if isinstance(image, np.ndarray):
+        image_tensor = torch.from_numpy(image).permute(2, 0, 1).float()
+        if image_tensor.max() > 1.0:
+            image_tensor = image_tensor / 255.0
+    else:
+        image_tensor = image
+    
+    # Điều chỉnh độ sáng
+    adjusted = F.adjust_brightness(image_tensor, factor)
+    
+    # Chuyển về PIL rồi về numpy
+    pil_image = T.ToPILImage()(adjusted)
+    return np.array(pil_image)
+
+    # Method 2
+    # brightness_value = np.clip(factor, -99, 99)
+    # offset = int(brightness_value * 255 / 99)
+    # result = image.astype(np.int16) + offset
+    # return np.clip(result, 0, 255).astype(np.uint8)
+
+    # Method 1
+    # return cv2.convertScaleAbs(image, alpha=factor, beta=0)
 
 def apply_blur(image, kernel_size):
     """Làm mờ ảnh với kernel size cho trước"""
     return cv2.GaussianBlur(image, (kernel_size, kernel_size), 0)
 
+def adjust_hue(image, factor):
+    """Điều chỉnh màu sắc (hue) của ảnh"""
+
+    #Method 2
+    factor = factor / 360
+
+
+    if isinstance(image, np.ndarray):
+        image_tensor = torch.from_numpy(image).permute(2, 0, 1).float()
+        if image_tensor.max() > 1.0:
+            image_tensor = image_tensor / 255.0
+    else:
+        image_tensor = image
+    
+    # Điều chỉnh độ sáng
+    adjusted = F.adjust_hue(image_tensor, factor)
+    
+    # Chuyển về PIL rồi về numpy
+    pil_image = T.ToPILImage()(adjusted)
+    return np.array(pil_image)
+
+    #Method 1
+    # hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    # # Chuyển sang float để tính toán
+    # h = hsv[:,:,0].astype(np.float32)
+    # # Thực hiện phép tính
+    # h = (h + factor) % 180
+    # # Chuyển lại uint8
+    # hsv[:,:,0] = h.astype(np.uint8)
+    # return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+def adjust_saturation(image, factor):
+    """Điều chỉnh độ bão hòa màu của ảnh"""
+    # Chuyển numpy array thành tensor
+    if isinstance(image, np.ndarray):
+        # Nếu là grayscale (H, W), thêm channel dimension
+        if len(image.shape) == 2:
+            image = np.expand_dims(image, axis=2)
+        
+        # Chuyển từ (H, W, C) sang (C, H, W) cho PyTorch
+        if image.shape[2] == 3:  # RGB
+            image_tensor = torch.from_numpy(image).permute(2, 0, 1)
+        elif image.shape[2] == 1:  # Grayscale
+            image_tensor = torch.from_numpy(image).permute(2, 0, 1)
+        else:
+            raise ValueError(f"Unsupported number of channels: {image.shape[2]}")
+        
+        # Đảm bảo tensor có dtype phù hợp (float32) và giá trị trong [0, 1]
+        if image_tensor.dtype == torch.uint8:
+            image_tensor = image_tensor.float() / 255.0
+        elif image_tensor.dtype != torch.float32:
+            image_tensor = image_tensor.float()
+    else:
+        image_tensor = image
+    
+    pic = F.adjust_saturation(image_tensor, factor)  # saturation_factor = 1.0 (không thay đổi)
+    pic = T.ToPILImage()(pic)
+    
+    return np.array(pic)
+    # hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    # hsv[:,:,1] = np.clip(hsv[:,:,1] * factor, 0, 255)
+    # return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+def adjust_exposure(image, factor):
+    """Điều chỉnh độ phơi sáng của ảnh"""
+    exposure_stops = factor / 12.5
+    multiplier = 2 ** exposure_stops
+    
+    # Áp dụng exponential scaling
+    result = image.astype(np.float32) * multiplier
+    
+    # Clamp về [0, 255]
+    result = np.clip(result, 0, 255)
+    return result.astype(np.uint8)
+    # return cv2.convertScaleAbs(image, alpha=1.0, beta=factor)
+
+def convert_to_grayscale(image):
+    """Chuyển ảnh sang grayscale"""
+    return cv2.cvtColor(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR)
+
+def apply_gaussian_blur(image, kernel_size, sigma):
+    """Áp dụng Gaussian blur với kernel size và sigma cho trước"""
+    return cv2.GaussianBlur(image, (kernel_size, kernel_size), sigma)
+
+def add_noise(image, noise_type='gaussian', mean=0, sigma=25):
+    """Thêm nhiễu vào ảnh
+    noise_type: 'gaussian' hoặc 'salt_pepper'
+    """
+    noisy = image.copy()  # Khởi tạo noisy từ ảnh gốc
+    
+    if noise_type.lower() == 'gaussian':
+        noise = np.random.normal(mean, sigma, image.shape).astype(np.uint8)
+        noisy = cv2.add(noisy, noise)
+    elif noise_type.lower() == 'salt & pepper':
+        # Thêm nhiễu muối
+        num_salt = np.ceil(0.05 * image.size * 0.5)
+        coords = [np.random.randint(0, i - 1, int(num_salt)) for i in image.shape]
+        noisy[coords[0], coords[1], :] = 255
+        # Thêm nhiễu tiêu
+        num_pepper = np.ceil(0.05 * image.size * 0.5)
+        coords = [np.random.randint(0, i - 1, int(num_pepper)) for i in image.shape]
+        noisy[coords[0], coords[1], :] = 0
+    else:
+        # Nếu không phải gaussian hoặc salt & pepper, trả về ảnh gốc
+        return image
+        
+    return noisy
+
+def rotate_90(image, direction='clockwise'):
+    """Xoay ảnh 90 độ theo hướng chỉ định
+    direction: 'clockwise', 'counter-clockwise', 'upside-down'
+    """
+    """Xoay ảnh 90 độ bằng phương pháp thủ công"""
+    height, width = image.shape[:2]
+    center = (width/2, height/2)
+    if direction == 'clockwise':
+        rotation_matrix = cv2.getRotationMatrix2D(center, 90, 1.0)
+        rotated = cv2.warpAffine(image, rotation_matrix, (width, height))
+        return rotated
+    elif direction == 'counter-clockwise':
+        rotation_matrix = cv2.getRotationMatrix2D(center, -90, 1.0)
+        rotated = cv2.warpAffine(image, rotation_matrix, (width, height))
+        return rotated
+    elif direction == 'upside-down':
+        rotation_matrix = cv2.getRotationMatrix2D(center, 180, 1.0)
+        rotated = cv2.warpAffine(image, rotation_matrix, (width, height))
+        return rotated
+    return image
+
 def has_any_augmentation(params):
     """Kiểm tra xem có kỹ thuật augmentation nào được bật không"""
     return (params.get('rotate', False) or 
+            params.get('rotate90', False) or
             params.get('flip', False) or 
             params.get('bright', False) or 
-            params.get('blur', False))
+            params.get('blur', False) or
+            params.get('hue', False) or
+            params.get('sat', False) or
+            params.get('exp', False) or
+            params.get('gray', False) or
+            params.get('noise', False))
 
 def augment_image(image, params):
     """Áp dụng các kỹ thuật augmentation cho ảnh"""
@@ -569,40 +1050,34 @@ def augment_image(image, params):
     
     augmented = image.copy()
     
-    # if params.get('rotate', False):
-    #     angle = random.uniform(params['rotate_min'], params['rotate_max'])
-    #     augmented = rotate_image(augmented, angle)
-    #     params['angle'] = angle  # Lưu góc xoay để sử dụng cho bbox
-        
-    # # Flip
-    # if params.get('flip', False):
-    #     h_flip = random.random() < 0.5 if params.get('flip_h', False) else False
-    #     v_flip = random.random() < 0.5 if params.get('flip_v', False) else False
-    #     augmented = flip_image(augmented, h_flip, v_flip)
-    #     params['flip_h'] = h_flip  # Lưu trạng thái flip để sử dụng cho bbox
-    #     params['flip_v'] = v_flip
-        
-    # # Brightness
-    # if params.get('bright', False):
-    #     factor = random.uniform(params['bright_min'], params['bright_max'])
-    #     augmented = adjust_brightness(augmented, factor)
-        
-    # # Blur
-    # if params.get('blur', False):
-    #     kernel_size = random.randint(params['blur_min'], params['blur_max'])
-    #     kernel_size = kernel_size * 2 + 1  # Đảm bảo kernel size là số lẻ
-    #     augmented = apply_blur(augmented, kernel_size)
-
     # Tạo danh sách các phương pháp augmentation được bật
     enabled_methods = []
     if params.get('rotate', False):
         enabled_methods.append('rotate')
+    if params.get('rotate90', False):
+        # Thêm các hướng xoay 90 độ được chọn
+        if params.get('rotate90_clockwise', False):
+            enabled_methods.append('rotate90_clockwise')
+        if params.get('rotate90_counter', False):
+            enabled_methods.append('rotate90_counter')
+        if params.get('rotate90_upside', False):
+            enabled_methods.append('rotate90_upside')
     if params.get('flip', False):
         enabled_methods.append('flip')
     if params.get('bright', False):
         enabled_methods.append('bright')
     if params.get('blur', False):
         enabled_methods.append('blur')
+    if params.get('hue', False):
+        enabled_methods.append('hue')
+    if params.get('sat', False):
+        enabled_methods.append('sat')
+    if params.get('exp', False):
+        enabled_methods.append('exp')
+    if params.get('gray', False):
+        enabled_methods.append('gray')
+    if params.get('noise', False):
+        enabled_methods.append('noise')
         
     # Random số lượng phương pháp sẽ áp dụng (ít nhất 1, nhiều nhất là số phương pháp đã bật)
     num_methods = random.randint(1, len(enabled_methods))
@@ -620,6 +1095,18 @@ def augment_image(image, params):
             augmented = rotate_image(augmented, angle)
             params['angle'] = angle  # Lưu góc xoay để sử dụng cho bbox
             
+        elif method == 'rotate90_clockwise':
+            augmented = rotate_90(augmented, 'clockwise')
+            params['rotate90_direction'] = 'clockwise'
+            
+        elif method == 'rotate90_counter':
+            augmented = rotate_90(augmented, 'counter-clockwise')
+            params['rotate90_direction'] = 'counter-clockwise'
+            
+        elif method == 'rotate90_upside':
+            augmented = rotate_90(augmented, 'upside-down')
+            params['rotate90_direction'] = 'upside-down'
+            
         elif method == 'flip':
             h_flip = random.random() < 0.5 if params.get('flip_h', False) else False
             v_flip = random.random() < 0.5 if params.get('flip_v', False) else False
@@ -635,9 +1122,30 @@ def augment_image(image, params):
             augmented = adjust_brightness(augmented, factor)
             
         elif method == 'blur':
-            kernel_size = random.randint(params['blur_min'], params['blur_max'])
-            kernel_size = kernel_size * 2 + 1  # Đảm bảo kernel size là số lẻ
+            kernel_size = params['blur_size'] * 2 + 1  # Đảm bảo kernel size là số lẻ
             augmented = apply_blur(augmented, kernel_size)
+            
+        elif method == 'hue':
+            factor = random.uniform(params['hue_min'], params['hue_max'])
+            augmented = adjust_hue(augmented, factor)
+            
+        elif method == 'sat':
+            factor = random.uniform(params['sat_min'], params['sat_max'])
+            augmented = adjust_saturation(augmented, factor)
+            
+        elif method == 'exp':
+            factor = random.uniform(params['exp_min'], params['exp_max'])
+            augmented = adjust_exposure(augmented, factor)
+            
+        elif method == 'gray':
+            augmented = convert_to_grayscale(augmented)
+            
+        elif method == 'noise':
+            noise_type = params.get('noise_type', 'gaussian').lower()
+            if noise_type == 'gaussian':
+                augmented = add_noise(augmented, 'gaussian', mean=0, sigma=25)
+            else:  # salt & pepper
+                augmented = add_noise(augmented, 'salt_pepper')
         
     return augmented
 
@@ -677,6 +1185,33 @@ def update_bbox(bbox, image_shape, params):
             y1 = max(0, min(y1, height))
             x2 = max(0, min(x2, width))
             y2 = max(0, min(y2, height))
+            
+        elif method == 'rotate90':
+            direction = params.get('rotate90_direction', 'clockwise')
+            # Lưu kích thước bbox gốc
+            original_bbox_width = x2 - x1
+            original_bbox_height = y2 - y1
+            
+            if direction == 'clockwise':
+                # Xoay 90 độ theo chiều kim đồng hồ
+                new_x1 = y1
+                new_y1 = width - x2
+                new_x2 = y2
+                new_y2 = width - x1
+            elif direction == 'counter-clockwise':
+                # Xoay 90 độ ngược chiều kim đồng hồ
+                new_x1 = height - y2
+                new_y1 = x1
+                new_x2 = height - y1
+                new_y2 = x2
+            else:  # upside-down
+                # Xoay 180 độ
+                new_x1 = width - x2
+                new_y1 = height - y2
+                new_x2 = width - x1
+                new_y2 = height - y1
+                
+            x1, y1, x2, y2 = new_x1, new_y1, new_x2, new_y2
             
         elif method == 'flip':
             if params.get('flip_h', False):
