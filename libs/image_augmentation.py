@@ -395,29 +395,67 @@ class AugmentationWidget(QWidget):
         
         aug_layout.addWidget(gray_frame)
 
-        # === NOISE ===
-        noise_frame = QFrame()
-        noise_frame.setFrameStyle(QFrame.StyledPanel)
-        noise_layout = QHBoxLayout(noise_frame)
-        noise_layout.setSpacing(10)
-        noise_layout.setContentsMargins(10, 10, 10, 10)
+        # === GAUSSIAN NOISE ===
+        gaussian_noise_frame = QFrame()
+        gaussian_noise_frame.setFrameStyle(QFrame.StyledPanel)
+        gaussian_noise_layout = QHBoxLayout(gaussian_noise_frame)
+        gaussian_noise_layout.setSpacing(10)
+        gaussian_noise_layout.setContentsMargins(10, 10, 10, 10)
         
-        self.noise_cb = QCheckBox("Noise")
-        self.noise_cb.setFixedWidth(CHECKBOX_WIDTH)
+        self.gaussian_noise_cb = QCheckBox("Gaussian Noise")
+        self.gaussian_noise_cb.setFixedWidth(CHECKBOX_WIDTH)
         
-        self.noise_type = QComboBox()
-        self.noise_type.addItems(['Gaussian', 'Salt & Pepper'])
-        self.noise_type.setFixedWidth(120)
+        gaussian_noise_label = QLabel("Percent:")
+        gaussian_noise_label.setFixedWidth(LABEL_WIDTH)
         
-        self.preview_noise_btn = QPushButton("Preview")
-        self.preview_noise_btn.setFixedWidth(BUTTON_WIDTH)
+        self.gaussian_noise_percent = QDoubleSpinBox()
+        self.gaussian_noise_percent.setRange(0.1, 5.0)
+        self.gaussian_noise_percent.setValue(2.0)
+        self.gaussian_noise_percent.setDecimals(1)
+        self.gaussian_noise_percent.setSingleStep(0.1)
+        self.gaussian_noise_percent.setFixedWidth(SPINBOX_WIDTH)
         
-        noise_layout.addWidget(self.noise_cb)
-        noise_layout.addWidget(self.noise_type)
-        noise_layout.addStretch()
-        noise_layout.addWidget(self.preview_noise_btn)
+        self.preview_gaussian_noise_btn = QPushButton("Preview")
+        self.preview_gaussian_noise_btn.setFixedWidth(BUTTON_WIDTH)
         
-        aug_layout.addWidget(noise_frame)
+        gaussian_noise_layout.addWidget(self.gaussian_noise_cb)
+        gaussian_noise_layout.addWidget(gaussian_noise_label)
+        gaussian_noise_layout.addWidget(self.gaussian_noise_percent)
+        gaussian_noise_layout.addStretch()
+        gaussian_noise_layout.addWidget(self.preview_gaussian_noise_btn)
+        
+        aug_layout.addWidget(gaussian_noise_frame)
+
+        # === SALT & PEPPER NOISE ===
+        salt_pepper_frame = QFrame()
+        salt_pepper_frame.setFrameStyle(QFrame.StyledPanel)
+        salt_pepper_layout = QHBoxLayout(salt_pepper_frame)
+        salt_pepper_layout.setSpacing(10)
+        salt_pepper_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.salt_pepper_cb = QCheckBox("Salt Pepper")
+        self.salt_pepper_cb.setFixedWidth(CHECKBOX_WIDTH)
+        
+        salt_pepper_label = QLabel("Percent:")
+        salt_pepper_label.setFixedWidth(LABEL_WIDTH)
+        
+        self.salt_pepper_percent = QDoubleSpinBox()
+        self.salt_pepper_percent.setRange(0.1, 5.0)
+        self.salt_pepper_percent.setValue(1.0)
+        self.salt_pepper_percent.setDecimals(1)
+        self.salt_pepper_percent.setSingleStep(0.1)
+        self.salt_pepper_percent.setFixedWidth(SPINBOX_WIDTH)
+        
+        self.preview_salt_pepper_btn = QPushButton("Preview")
+        self.preview_salt_pepper_btn.setFixedWidth(BUTTON_WIDTH)
+        
+        salt_pepper_layout.addWidget(self.salt_pepper_cb)
+        salt_pepper_layout.addWidget(salt_pepper_label)
+        salt_pepper_layout.addWidget(self.salt_pepper_percent)
+        salt_pepper_layout.addStretch()
+        salt_pepper_layout.addWidget(self.preview_salt_pepper_btn)
+        
+        aug_layout.addWidget(salt_pepper_frame)
         
         # === ROTATE 90 ===
         rotate90_frame = QFrame()
@@ -526,7 +564,8 @@ class AugmentationWidget(QWidget):
         self.preview_sat_btn.clicked.connect(self.preview_saturation)
         self.preview_exp_btn.clicked.connect(self.preview_exposure)
         self.preview_gray_btn.clicked.connect(self.preview_grayscale)
-        self.preview_noise_btn.clicked.connect(self.preview_noise)
+        self.preview_gaussian_noise_btn.clicked.connect(self.preview_gaussian_noise)
+        self.preview_salt_pepper_btn.clicked.connect(self.preview_salt_pepper)
         self.preview_rotate90_btn.clicked.connect(self.preview_rotate90)
     
     def has_augmentation_enabled(self):
@@ -539,7 +578,8 @@ class AugmentationWidget(QWidget):
                 self.sat_cb.isChecked() or
                 self.exp_cb.isChecked() or
                 self.gray_cb.isChecked() or
-                self.noise_cb.isChecked() or
+                self.gaussian_noise_cb.isChecked() or
+                self.salt_pepper_cb.isChecked() or
                 self.rotate90_cb.isChecked())
         
     def on_augment_clicked(self):
@@ -794,10 +834,10 @@ class AugmentationWidget(QWidget):
         # Hiển thị preview
         self.preview_dialog.show_images(img, img_gray)
 
-    def preview_noise(self):
-        """Xem trước hiệu ứng nhiễu"""
-        if not self.noise_cb.isChecked():
-            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn nhiễu!")
+    def preview_gaussian_noise(self):
+        """Xem trước hiệu ứng nhiễu Gaussian"""
+        if not self.gaussian_noise_cb.isChecked():
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn Gaussian Noise!")
             return
             
         img = self.get_current_image()
@@ -805,13 +845,24 @@ class AugmentationWidget(QWidget):
             QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
             return
             
-        # Tạo ảnh preview với độ nhiễu min và max
-        img_min = add_noise(img.copy(), self.noise_type.currentText())
-        img_max = add_noise(img.copy(), self.noise_type.currentText())
-        
-        # Hiển thị preview
-        self.preview_dialog.show_images(img, img_min)
-        self.preview_dialog.show_images(img, img_max)
+        # Tạo ảnh preview với phần trăm nhiễu đã chọn
+        img_noisy = add_noise(img.copy(), 'gaussian', percent=self.gaussian_noise_percent.value())
+        self.preview_dialog.show_images(img, img_noisy)
+
+    def preview_salt_pepper(self):
+        """Xem trước hiệu ứng nhiễu Salt & Pepper"""
+        if not self.salt_pepper_cb.isChecked():
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn Salt & Pepper!")
+            return
+            
+        img = self.get_current_image()
+        if img is None:
+            QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
+            return
+            
+        # Tạo ảnh preview với phần trăm nhiễu đã chọn
+        img_noisy = add_noise(img.copy(), 'salt_pepper', percent=self.salt_pepper_percent.value())
+        self.preview_dialog.show_images(img, img_noisy)
 
     def preview_rotate90(self):
         """Xem trước hiệu ứng xoay 90 độ"""
@@ -984,22 +1035,29 @@ def apply_gaussian_blur(image, kernel_size, sigma):
     """Áp dụng Gaussian blur với kernel size và sigma cho trước"""
     return cv2.GaussianBlur(image, (kernel_size, kernel_size), sigma)
 
-def add_noise(image, noise_type='gaussian', mean=0, sigma=25):
+def add_noise(image, noise_type='gaussian', mean=0, sigma=25, percent=5):
     """Thêm nhiễu vào ảnh
     noise_type: 'gaussian' hoặc 'salt_pepper'
+    percent: phần trăm nhiễu (1-100)
     """
     noisy = image.copy()  # Khởi tạo noisy từ ảnh gốc
     
     if noise_type.lower() == 'gaussian':
-        noise = np.random.normal(mean, sigma, image.shape).astype(np.uint8)
+        # Tính toán sigma dựa trên phần trăm nhiễu
+        adjusted_sigma = sigma * (percent / 100.0)
+        noise = np.random.normal(mean, adjusted_sigma, image.shape).astype(np.uint8)
         noisy = cv2.add(noisy, noise)
-    elif noise_type.lower() == 'salt & pepper':
+    elif noise_type.lower() == 'salt_pepper':
+        # Tính số lượng pixel sẽ thêm nhiễu
+        num_noise = np.ceil(percent * image.size * 0.01)
+        
         # Thêm nhiễu muối
-        num_salt = np.ceil(0.05 * image.size * 0.5)
+        num_salt = np.ceil(num_noise * 0.5)
         coords = [np.random.randint(0, i - 1, int(num_salt)) for i in image.shape]
         noisy[coords[0], coords[1], :] = 255
+        
         # Thêm nhiễu tiêu
-        num_pepper = np.ceil(0.05 * image.size * 0.5)
+        num_pepper = np.ceil(num_noise * 0.5)
         coords = [np.random.randint(0, i - 1, int(num_pepper)) for i in image.shape]
         noisy[coords[0], coords[1], :] = 0
     else:
@@ -1040,7 +1098,8 @@ def has_any_augmentation(params):
             params.get('sat', False) or
             params.get('exp', False) or
             params.get('gray', False) or
-            params.get('noise', False))
+            params.get('gaussian_noise', False) or
+            params.get('salt_pepper', False))
 
 def augment_image(image, params):
     """Áp dụng các kỹ thuật augmentation cho ảnh"""
@@ -1076,8 +1135,10 @@ def augment_image(image, params):
         enabled_methods.append('exp')
     if params.get('gray', False):
         enabled_methods.append('gray')
-    if params.get('noise', False):
-        enabled_methods.append('noise')
+    if params.get('gaussian_noise', False):
+        enabled_methods.append('gaussian_noise')
+    if params.get('salt_pepper', False):
+        enabled_methods.append('salt_pepper')
         
     # Random số lượng phương pháp sẽ áp dụng (ít nhất 1, nhiều nhất là số phương pháp đã bật)
     num_methods = random.randint(1, len(enabled_methods))
@@ -1140,12 +1201,11 @@ def augment_image(image, params):
         elif method == 'gray':
             augmented = convert_to_grayscale(augmented)
             
-        elif method == 'noise':
-            noise_type = params.get('noise_type', 'gaussian').lower()
-            if noise_type == 'gaussian':
-                augmented = add_noise(augmented, 'gaussian', mean=0, sigma=25)
-            else:  # salt & pepper
-                augmented = add_noise(augmented, 'salt_pepper')
+        elif method == 'gaussian_noise':
+            augmented = add_noise(augmented, 'gaussian', percent=params.get('gaussian_noise_percent', 5))
+            
+        elif method == 'salt_pepper':
+            augmented = add_noise(augmented, 'salt_pepper', percent=params.get('salt_pepper_percent', 5))
         
     return augmented
 
