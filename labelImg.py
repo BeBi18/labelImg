@@ -1837,6 +1837,10 @@ class MainWindow(QMainWindow, WindowMixin):
             'rotate': widget.rotate_cb.isChecked(),
             'rotate_min': widget.rotate_min.value(),
             'rotate_max': widget.rotate_max.value(),
+            'rotate90': widget.rotate90_cb.isChecked(),
+            'rotate90_clockwise': widget.rotate90_clockwise.isChecked(),
+            'rotate90_counter': widget.rotate90_counter.isChecked(),
+            'rotate90_upside': widget.rotate90_upside.isChecked(),
             'flip': widget.flip_cb.isChecked(),
             'flip_h': widget.flip_h.isChecked(),
             'flip_v': widget.flip_v.isChecked(),
@@ -1844,8 +1848,24 @@ class MainWindow(QMainWindow, WindowMixin):
             'bright_min': widget.bright_min.value(),
             'bright_max': widget.bright_max.value(),
             'blur': widget.blur_cb.isChecked(),
-            'blur_min': widget.blur_min.value(),
-            'blur_max': widget.blur_max.value()
+            'blur_size': widget.blur_size.value(),
+            'hue': widget.hue_cb.isChecked(),
+            'hue_min': widget.hue_min.value(),
+            'hue_max': widget.hue_max.value(),
+            'sat': widget.sat_cb.isChecked(),
+            'sat_min': widget.sat_min.value(),
+            'sat_max': widget.sat_max.value(),
+            'exp': widget.exp_cb.isChecked(),
+            'exp_min': widget.exp_min.value(),
+            'exp_max': widget.exp_max.value(),
+            'gray': widget.gray_cb.isChecked(),
+            'gaussian_noise': widget.gaussian_noise_cb.isChecked(),
+            'gaussian_noise_percent': widget.gaussian_noise_percent.value(),
+            'salt_pepper': widget.salt_pepper_cb.isChecked(),
+            'salt_pepper_percent': widget.salt_pepper_percent.value(),
+            'crop': widget.crop_cb.isChecked(),
+            'crop_min': widget.crop_min.value(),
+            'crop_max': widget.crop_max.value()
         }
         return params
         

@@ -487,6 +487,47 @@ class AugmentationWidget(QWidget):
         
         aug_layout.addWidget(rotate90_frame)
         
+        # === CROP ===
+        crop_frame = QFrame()
+        crop_frame.setFrameStyle(QFrame.StyledPanel)
+        crop_layout = QHBoxLayout(crop_frame)
+        crop_layout.setSpacing(10)
+        crop_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.crop_cb = QCheckBox("Crop")
+        self.crop_cb.setFixedWidth(CHECKBOX_WIDTH)
+        
+        crop_min_label = QLabel("Min:")
+        crop_min_label.setFixedWidth(LABEL_WIDTH)
+        
+        self.crop_min = QSpinBox()
+        self.crop_min.setRange(0, 99)
+        self.crop_min.setValue(10)
+        self.crop_min.setFixedWidth(SPINBOX_WIDTH)
+        self.crop_min.valueChanged.connect(lambda: self.check_min_max(self.crop_min, self.crop_max))
+        
+        crop_max_label = QLabel("Max:")
+        crop_max_label.setFixedWidth(LABEL_WIDTH)
+        
+        self.crop_max = QSpinBox()
+        self.crop_max.setRange(0, 99)
+        self.crop_max.setValue(20)
+        self.crop_max.setFixedWidth(SPINBOX_WIDTH)
+        self.crop_max.valueChanged.connect(lambda: self.check_min_max(self.crop_min, self.crop_max))
+        
+        self.preview_crop_btn = QPushButton("Preview")
+        self.preview_crop_btn.setFixedWidth(BUTTON_WIDTH)
+        
+        crop_layout.addWidget(self.crop_cb)
+        crop_layout.addWidget(crop_min_label)
+        crop_layout.addWidget(self.crop_min)
+        crop_layout.addWidget(crop_max_label)
+        crop_layout.addWidget(self.crop_max)
+        crop_layout.addStretch()
+        crop_layout.addWidget(self.preview_crop_btn)
+        
+        aug_layout.addWidget(crop_frame)
+        
         # Thêm stretch để đẩy các phần tử lên trên
         aug_layout.addStretch()
         
@@ -567,6 +608,7 @@ class AugmentationWidget(QWidget):
         self.preview_gaussian_noise_btn.clicked.connect(self.preview_gaussian_noise)
         self.preview_salt_pepper_btn.clicked.connect(self.preview_salt_pepper)
         self.preview_rotate90_btn.clicked.connect(self.preview_rotate90)
+        self.preview_crop_btn.clicked.connect(self.preview_crop)
     
     def has_augmentation_enabled(self):
         """Kiểm tra xem có kỹ thuật augmentation nào được bật không"""
@@ -580,6 +622,7 @@ class AugmentationWidget(QWidget):
                 self.gray_cb.isChecked() or
                 self.gaussian_noise_cb.isChecked() or
                 self.salt_pepper_cb.isChecked() or
+                self.crop_cb.isChecked() or
                 self.rotate90_cb.isChecked())
         
     def on_augment_clicked(self):
@@ -893,6 +936,25 @@ class AugmentationWidget(QWidget):
             img_rotated = rotate_90(img.copy(), 'upside-down')
             self.preview_dialog.show_images(img, img_rotated)
 
+    def preview_crop(self):
+        """Xem trước hiệu ứng crop"""
+        if not self.crop_cb.isChecked():
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn crop!")
+            return
+            
+        img = self.get_current_image()
+        if img is None:
+            QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
+            return
+            
+        # Tạo ảnh preview với độ crop min và max
+        img_min = crop_image(img.copy(), self.crop_min.value())
+        img_max = crop_image(img.copy(), self.crop_max.value())
+        
+        # Hiển thị preview
+        self.preview_dialog.show_images(img, img_min)
+        self.preview_dialog.show_images(img, img_max)
+
     def check_min_max(self, min_spinbox, max_spinbox):
         """Kiểm tra và cập nhật giá trị min/max"""
         min_val = min_spinbox.value()
@@ -1087,6 +1149,29 @@ def rotate_90(image, direction='clockwise'):
         return rotated
     return image
 
+def crop_image(image, scale):
+    """Crop ảnh với tỷ lệ scale cho trước
+    scale: tỷ lệ crop (0.1-1.0)
+    """
+    height, width = image.shape[:2]
+    scale = 1 - scale / 100
+
+    # Tính toán kích thước mới
+    new_height = int(height * scale)
+    new_width = int(width * scale)
+    
+    # Tính toán vị trí bắt đầu crop
+    start_x = (width - new_width) // 2
+    start_y = (height - new_height) // 2
+    
+    # Thực hiện crop
+    cropped = image[start_y:start_y + new_height, start_x:start_x + new_width]
+    
+    # Resize về kích thước gốc
+    resized = cv2.resize(cropped, (width, height))
+    
+    return resized
+
 def has_any_augmentation(params):
     """Kiểm tra xem có kỹ thuật augmentation nào được bật không"""
     return (params.get('rotate', False) or 
@@ -1099,7 +1184,8 @@ def has_any_augmentation(params):
             params.get('exp', False) or
             params.get('gray', False) or
             params.get('gaussian_noise', False) or
-            params.get('salt_pepper', False))
+            params.get('salt_pepper', False) or
+            params.get('crop', False))
 
 def augment_image(image, params):
     """Áp dụng các kỹ thuật augmentation cho ảnh"""
@@ -1139,6 +1225,8 @@ def augment_image(image, params):
         enabled_methods.append('gaussian_noise')
     if params.get('salt_pepper', False):
         enabled_methods.append('salt_pepper')
+    if params.get('crop', False):
+        enabled_methods.append('crop')
         
     # Random số lượng phương pháp sẽ áp dụng (ít nhất 1, nhiều nhất là số phương pháp đã bật)
     num_methods = random.randint(1, len(enabled_methods))
@@ -1206,6 +1294,11 @@ def augment_image(image, params):
             
         elif method == 'salt_pepper':
             augmented = add_noise(augmented, 'salt_pepper', percent=params.get('salt_pepper_percent', 5))
+        
+        elif method == 'crop':
+            scale = random.uniform(params.get('crop_min', 0.8), params.get('crop_max', 1.0))
+            augmented = crop_image(augmented, scale)
+            params['crop_scale'] = scale
         
     return augmented
 
@@ -1278,6 +1371,26 @@ def update_bbox(bbox, image_shape, params):
                 x1, x2 = width - x2, width - x1
             if params.get('flip_v', False):
                 y1, y2 = height - y2, height - y1
+            
+        elif method == 'crop':
+            scale = params.get('crop_scale', 1.0)
+            # Tính toán kích thước mới
+            new_height = int(height * scale)
+            new_width = int(width * scale)
+            
+            # Tính toán vị trí bắt đầu crop
+            start_x = (width - new_width) // 2
+            start_y = (height - new_height) // 2
+            
+            # Tính toán tỷ lệ scale
+            scale_x = width / new_width
+            scale_y = height / new_height
+            
+            # Cập nhật tọa độ bbox
+            x1 = (x1 - start_x) * scale_x
+            y1 = (y1 - start_y) * scale_y
+            x2 = (x2 - start_x) * scale_x
+            y2 = (y2 - start_y) * scale_y
             
     # Đảm bảo tọa độ nằm trong ảnh
     x1 = max(0, min(x1, width))
