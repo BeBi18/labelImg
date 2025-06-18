@@ -11,7 +11,8 @@ import cv2
 import torchvision.transforms.functional as F
 import torchvision.transforms as T
 import torch
-
+from torchvision.transforms.functional import _get_inverse_affine_matrix
+import math
 
 class PreviewDialog(QDialog):
     def __init__(self, parent=None):
@@ -528,6 +529,45 @@ class AugmentationWidget(QWidget):
         
         aug_layout.addWidget(crop_frame)
         
+        # === SHEAR ===
+        shear_frame = QFrame()
+        shear_frame.setFrameStyle(QFrame.StyledPanel)
+        shear_layout = QHBoxLayout(shear_frame)
+        shear_layout.setSpacing(10)
+        shear_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.shear_cb = QCheckBox("Shear")
+        self.shear_cb.setFixedWidth(CHECKBOX_WIDTH)
+        
+        shear_h_label = QLabel("Horizontal:")
+        shear_h_label.setFixedWidth(LABEL_WIDTH)
+        
+        self.shear_h = QSpinBox()
+        self.shear_h.setRange(0, 45)
+        self.shear_h.setValue(15)
+        self.shear_h.setFixedWidth(SPINBOX_WIDTH)
+        
+        shear_v_label = QLabel("Vertical:")
+        shear_v_label.setFixedWidth(LABEL_WIDTH)
+        
+        self.shear_v = QSpinBox()
+        self.shear_v.setRange(0, 45)
+        self.shear_v.setValue(15)
+        self.shear_v.setFixedWidth(SPINBOX_WIDTH)
+        
+        self.preview_shear_btn = QPushButton("Preview")
+        self.preview_shear_btn.setFixedWidth(BUTTON_WIDTH)
+        
+        shear_layout.addWidget(self.shear_cb)
+        shear_layout.addWidget(shear_h_label)
+        shear_layout.addWidget(self.shear_h)
+        shear_layout.addWidget(shear_v_label)
+        shear_layout.addWidget(self.shear_v)
+        shear_layout.addStretch()
+        shear_layout.addWidget(self.preview_shear_btn)
+        
+        aug_layout.addWidget(shear_frame)
+        
         # Thêm stretch để đẩy các phần tử lên trên
         aug_layout.addStretch()
         
@@ -609,6 +649,7 @@ class AugmentationWidget(QWidget):
         self.preview_salt_pepper_btn.clicked.connect(self.preview_salt_pepper)
         self.preview_rotate90_btn.clicked.connect(self.preview_rotate90)
         self.preview_crop_btn.clicked.connect(self.preview_crop)
+        self.preview_shear_btn.clicked.connect(self.preview_shear)
     
     def has_augmentation_enabled(self):
         """Kiểm tra xem có kỹ thuật augmentation nào được bật không"""
@@ -623,7 +664,8 @@ class AugmentationWidget(QWidget):
                 self.gaussian_noise_cb.isChecked() or
                 self.salt_pepper_cb.isChecked() or
                 self.crop_cb.isChecked() or
-                self.rotate90_cb.isChecked())
+                self.rotate90_cb.isChecked() or
+                self.shear_cb.isChecked())
         
     def on_augment_clicked(self):
         """Xử lý khi click nút Augment Image"""
@@ -955,6 +997,32 @@ class AugmentationWidget(QWidget):
         self.preview_dialog.show_images(img, img_min)
         self.preview_dialog.show_images(img, img_max)
 
+    def preview_shear(self):
+        """Xem trước hiệu ứng shear"""
+        if not self.shear_cb.isChecked():
+            QMessageBox.warning(self, "Cảnh báo", "Vui lòng bật tùy chọn shear!")
+            return
+            
+        img = self.get_current_image()
+        if img is None:
+            QMessageBox.warning(self, "Cảnh báo", "Không có ảnh nào được chọn!")
+            return
+            
+        # Tạo ảnh preview với các tổ hợp shear
+        h = self.shear_h.value()
+        v = self.shear_v.value()
+        
+        img1 = apply_shear(img.copy(), h, v)  # (h, v)
+        img2 = apply_shear(img.copy(), -h, v)  # (-h, v)
+        img3 = apply_shear(img.copy(), -h, -v)  # (-h, -v)
+        img4 = apply_shear(img.copy(), h, -v)  # (h, -v)
+        
+        # Hiển thị preview
+        self.preview_dialog.show_images(img, img1)
+        self.preview_dialog.show_images(img, img2)
+        self.preview_dialog.show_images(img, img3)
+        self.preview_dialog.show_images(img, img4)
+
     def check_min_max(self, min_spinbox, max_spinbox):
         """Kiểm tra và cập nhật giá trị min/max"""
         min_val = min_spinbox.value()
@@ -1172,6 +1240,79 @@ def crop_image(image, scale):
     
     return resized
 
+def apply_shear(image, horizontal, vertical):
+    """Áp dụng shear cho ảnh
+    horizontal: góc shear theo chiều ngang (-45 đến 45 độ)
+    vertical: góc shear theo chiều dọc (-45 đến 45 độ)
+    """
+    # height, width = image.shape[:2]
+    
+    # # Chuyển đổi góc sang radian
+    # h_rad = np.deg2rad(horizontal)
+    # v_rad = np.deg2rad(vertical)
+
+    height, width = image.shape[:2]
+    
+    # Chuyển numpy array thành tensor
+    if isinstance(image, np.ndarray):
+        # Nếu là grayscale (H, W), thêm channel dimension
+        if len(image.shape) == 2:
+            image = np.expand_dims(image, axis=2)
+        
+        # Chuyển từ (H, W, C) sang (C, H, W) cho PyTorch
+        if image.shape[2] == 3:  # RGB
+            image_tensor = torch.from_numpy(image).permute(2, 0, 1)
+        elif image.shape[2] == 1:  # Grayscale
+            image_tensor = torch.from_numpy(image).permute(2, 0, 1)
+        else:
+            raise ValueError(f"Unsupported number of channels: {image.shape[2]}")
+        
+        # Đảm bảo tensor có dtype phù hợp (float32) và giá trị trong [0, 1]
+        if image_tensor.dtype == torch.uint8:
+            image_tensor = image_tensor.float() / 255.0
+        elif image_tensor.dtype != torch.float32:
+            image_tensor = image_tensor.float()
+    else:
+        image_tensor = image
+        
+    # Đảm bảo tensor có đúng định dạng (thêm batch dimension nếu cần)
+    if len(image_tensor.shape) == 3:
+        image_tensor = image_tensor.unsqueeze(0)  # Thêm batch dimension
+    
+    # Áp dụng shear transformation
+    # shear parameter trong PyTorch là [shear_x, shear_y] theo degrees
+    # shear_params = [vertical, horizontal]
+    shear_params = [horizontal, vertical]
+    
+    pic = F.affine(
+        image_tensor, 
+        angle=0, 
+        translate=(0, 0), 
+        scale=1.0, 
+        shear=shear_params,
+        fill=0  # Thêm fill parameter để xử lý vùng trống
+    )
+    
+    # Loại bỏ batch dimension nếu đã thêm
+    if pic.shape[0] == 1:
+        pic = pic.squeeze(0)
+    
+    # Chuyển về PIL Image
+    pic = T.ToPILImage()(pic)
+    
+    return np.array(pic)
+    
+    # # Tạo ma trận biến đổi
+    # M = np.array([
+    #     [1, np.tan(h_rad), 0],
+    #     [np.tan(v_rad), 1, 0]
+    # ], dtype=np.float32)
+    
+    # # Áp dụng biến đổi
+    # sheared = cv2.warpAffine(image, M, (width, height))
+
+    # return sheared
+
 def has_any_augmentation(params):
     """Kiểm tra xem có kỹ thuật augmentation nào được bật không"""
     return (params.get('rotate', False) or 
@@ -1185,7 +1326,8 @@ def has_any_augmentation(params):
             params.get('gray', False) or
             params.get('gaussian_noise', False) or
             params.get('salt_pepper', False) or
-            params.get('crop', False))
+            params.get('crop', False) or
+            params.get('shear', False))
 
 def augment_image(image, params):
     """Áp dụng các kỹ thuật augmentation cho ảnh"""
@@ -1227,6 +1369,8 @@ def augment_image(image, params):
         enabled_methods.append('salt_pepper')
     if params.get('crop', False):
         enabled_methods.append('crop')
+    if params.get('shear', False):
+        enabled_methods.append('shear')
         
     # Random số lượng phương pháp sẽ áp dụng (ít nhất 1, nhiều nhất là số phương pháp đã bật)
     num_methods = random.randint(1, len(enabled_methods))
@@ -1299,8 +1443,27 @@ def augment_image(image, params):
             scale = random.uniform(params.get('crop_min', 0.8), params.get('crop_max', 1.0))
             augmented = crop_image(augmented, scale)
             params['crop_scale'] = scale
+            
+        elif method == 'shear':
+            h = random.uniform(-params['shear_h'], params['shear_h'])
+            v = random.uniform(-params['shear_v'], params['shear_v'])
+            augmented = apply_shear(augmented, h, v)
+            params['shear_h_angle'] = h
+            params['shear_v_angle'] = v
         
     return augmented
+
+def apply_affine_to_point(pt, matrix):
+    """Áp dụng ma trận affine cho một điểm"""
+    x, y = pt
+    # Matrix format: [a, b, c, d, e, f] tương ứng với:
+    # [[a, b, c],
+    #  [d, e, f],
+    #  [0, 0, 1]]
+    a, b, c, d, e, f = matrix
+    new_x = a * x + b * y + c
+    new_y = d * x + e * y + f
+    return [new_x, new_y]
 
 def update_bbox(bbox, image_shape, params):
     """Cập nhật tọa độ bounding box sau khi augmentation"""
@@ -1391,11 +1554,124 @@ def update_bbox(bbox, image_shape, params):
             y1 = (y1 - start_y) * scale_y
             x2 = (x2 - start_x) * scale_x
             y2 = (y2 - start_y) * scale_y
+
+                
+        # elif method == 'shear':
+        #     h_angle = params.get('shear_h_angle', 0)
+        #     v_angle = params.get('shear_v_angle', 0)
             
-    # Đảm bảo tọa độ nằm trong ảnh
-    x1 = max(0, min(x1, width))
-    y1 = max(0, min(y1, height))
-    x2 = max(0, min(x2, width))
-    y2 = max(0, min(y2, height))
+        #     cx, cy = width / 2, height / 2  # Tâm ảnh
     
-    return [x1, y1, x2, y2] 
+        #     # Lấy ma trận transformation ngược (để transform từ output về input)
+        #     # Nhưng chúng ta cần ma trận thuận (từ input sang output)
+        #     # Nên ta sẽ dùng ma trận inverse của inverse matrix
+        #     inverse_matrix = _get_inverse_affine_matrix(
+        #         center=(cx, cy),
+        #         angle=0,
+        #         translate=(0, 0),
+        #         scale=1.0,
+        #         shear=[h_angle, v_angle]
+        #     )
+            
+        #     # Chuyển đổi inverse matrix thành forward matrix
+        #     # Bằng cách tính inverse của inverse matrix
+        #     inv_matrix_2d = np.array([
+        #         [inverse_matrix[0], inverse_matrix[1], inverse_matrix[2]],
+        #         [inverse_matrix[3], inverse_matrix[4], inverse_matrix[5]],
+        #         [0, 0, 1]
+        #     ])
+            
+        #     # Tính ma trận thuận
+        #     forward_matrix_2d = np.linalg.inv(inv_matrix_2d)
+        #     forward_matrix = forward_matrix_2d[:2].flatten()  # Chỉ lấy 6 phần tử đầu
+            
+        #     # Tọa độ 4 góc của bbox
+        #     x1, y1, x2, y2 = bbox
+        #     points = [
+        #         [x1, y1],  # Top-left
+        #         [x2, y1],  # Top-right
+        #         [x2, y2],  # Bottom-right
+        #         [x1, y2]   # Bottom-left
+        #     ]
+            
+        #     # Áp dụng transformation cho tất cả các điểm
+        #     new_points = [apply_affine_to_point(pt, inverse_matrix) for pt in points]
+            
+        #     # Tính bbox mới từ các điểm đã transform
+        #     new_xs = [p[0] for p in new_points]
+        #     new_ys = [p[1] for p in new_points]
+            
+        #     new_bbox = [
+        #         min(new_xs),  # x1
+        #         min(new_ys),  # y1
+        #         max(new_xs),  # x2
+        #         max(new_ys)   # y2
+        #     ]
+        #     x1 = max(0, new_bbox[0])  # x1
+        #     y1 = max(0, new_bbox[1])  # y1
+        #     x2 = min(width, new_bbox[2])   # x2
+        #     y2 = min(height, new_bbox[3])  # y2
+
+        elif method=='shear':
+            h_angle = params.get('shear_h_angle', 0)
+            v_angle = params.get('shear_v_angle', 0)
+            
+            # Convert angles to radians
+            # h_rad = math.radians(h_angle)
+            # v_rad = math.radians(v_angle)
+            
+            # Original bbox
+            x1, y1, x2, y2 = bbox
+            
+            # Calculate shear parameters for torchvision (in degrees)
+            shear_x = h_angle  # horizontal shear
+            shear_y = v_angle  # vertical shear
+            
+            # Create mask from original bbox
+            mask = torch.zeros((height, width), dtype=torch.uint8)
+            x1, y1, x2, y2 = map(int, bbox)
+            mask[y1:y2, x1:x2] = 1
+            mask_pil = F.to_pil_image(mask * 255)
+            mask_pil.save('original.png')
+            # Apply shear transformation to mask
+            transformed_mask = F.affine(mask_pil, angle=0, translate=(0, 0), scale=1.0,
+                                    shear=[shear_x, shear_y], fill=0)
+            transformed_mask.save('shear.png')
+            # Convert mask to numpy for OpenCV processing
+            mask_np = np.array(transformed_mask)
+            
+            # Find contours and convex hull
+            contours, _ = cv2.findContours(mask_np, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if not contours:
+                return [x1, y1, x2, y2] # No object found
+            
+            # Get the largest contour (assuming it's the main object)
+            cnt = max(contours, key=cv2.contourArea)
+            hull = cv2.convexHull(cnt)
+            
+            # Get bounding rectangle from convex hull
+            x, y, w, h = cv2.boundingRect(hull)
+            
+            # Calculate final bbox coordinates in the required format
+            x1_new = x
+            y1_new = y
+            x2_new = x + w
+            y2_new = y + h
+            
+            # Ensure coordinates are within image bounds
+            x1 = max(0, x1_new)
+            y1 = max(0, y1_new)
+            x2 = min(width, x2_new)
+            y2 = min(height, y2_new)
+            
+
+            
+    # Đảm bảo tọa độ nằm trong ảnh và bbox hợp lệ
+    x1 = max(0, min(x1, width-1))
+    y1 = max(0, min(y1, height-1))
+    x2 = max(x1+1, min(x2, width))
+    y2 = max(y1+1, min(y2, height))
+    
+    return [x1, y1, x2, y2]
+
+

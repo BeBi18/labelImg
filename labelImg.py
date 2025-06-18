@@ -1865,7 +1865,10 @@ class MainWindow(QMainWindow, WindowMixin):
             'salt_pepper_percent': widget.salt_pepper_percent.value(),
             'crop': widget.crop_cb.isChecked(),
             'crop_min': widget.crop_min.value(),
-            'crop_max': widget.crop_max.value()
+            'crop_max': widget.crop_max.value(),
+            'shear': widget.shear_cb.isChecked(),
+            'shear_h': widget.shear_h.value(),
+            'shear_v': widget.shear_v.value()
         }
         return params
         
