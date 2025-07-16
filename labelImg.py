@@ -559,6 +559,9 @@ class MainWindow(QMainWindow, WindowMixin):
         if self.file_path and os.path.isdir(self.file_path):
             self.open_dir_dialog(dir_path=self.file_path, silent=True)
 
+        QTimer.singleShot(100, self.show_all_docks)
+
+
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_Control:
             self.canvas.set_drawing_shape_to_square(False)
@@ -2096,6 +2099,12 @@ class MainWindow(QMainWindow, WindowMixin):
             self.default_label = None
             # Thêm một item rỗng vào combobox để tránh lỗi index
             self.default_label_combo_box.cb.addItem("")
+
+    def show_all_docks(self):
+        docks = ['dock', 'file_dock', 'image_processor_dock', 'augmentation_dock']
+        for dock_name in docks:
+            if hasattr(self, dock_name):
+                getattr(self, dock_name).setVisible(True)
 
 def inverted(color):
     return QColor(*[255 - v for v in color.getRgb()])
