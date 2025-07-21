@@ -2148,8 +2148,8 @@ class MainWindow(QMainWindow, WindowMixin):
                 label_file.save_create_ml_format(label_path, shapes, save_path, None,
                                                 self.label_hist, self.line_color.getRgb(), self.fill_color.getRgb())
         
-        QMessageBox.information(self, "Thông báo", 
-                              f"Đã tạo {num_images} ảnh mới trong thư mục {save_dir}")
+        # QMessageBox.information(self, "Thông báo", 
+        #                       f"Đã tạo {num_images} ảnh mới trong thư mục {save_dir}")
 
     def augment_all_images(self, save_dir):
         """Augment tất cả ảnh trong thư mục hiện tại"""

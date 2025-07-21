@@ -4,7 +4,7 @@ import numpy as np
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                             QCheckBox, QSpinBox, QDoubleSpinBox, QPushButton,
                             QFileDialog, QMessageBox, QGroupBox, QDialog,
-                            QFrame, QGridLayout, QScrollArea, QComboBox)
+                            QFrame, QGridLayout, QScrollArea, QComboBox, QProgressBar)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap
 import cv2
@@ -13,6 +13,9 @@ import torchvision.transforms as T
 import torch
 from torchvision.transforms.functional import _get_inverse_affine_matrix
 import math
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtWidgets import QApplication
 
 class PreviewDialog(QDialog):
     def __init__(self, parent=None):
@@ -632,6 +635,14 @@ class AugmentationWidget(QWidget):
         
         main_layout.addWidget(btn_frame)
         
+        # Progress bar for apply all
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(False)
+        main_layout.addWidget(self.progress_bar)
+
         self.setLayout(main_layout)
         
         # Kết nối signals
@@ -723,15 +734,22 @@ class AugmentationWidget(QWidget):
         # Random chọn ảnh
         selected_images = random.sample(labeled_images, num_images)
         
-        # Augment từng ảnh được chọn
+        # Augment từng ảnh được chọn với progress bar
         total_augmented = 0
-        for img_path in selected_images:
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        QApplication.processEvents()
+        total = len(selected_images)
+        for idx, img_path in enumerate(selected_images):
             self.main_window.load_file(img_path)
             self.main_window.augment_current_image(save_dir)
             total_augmented += self.num_images.value()
-            
-        QMessageBox.information(self, "Thông báo", 
-                              f"Đã tạo {total_augmented} ảnh mới từ {num_images} ảnh gốc trong thư mục {save_dir}")
+            progress = int((idx + 1) / total * 100)
+            self.progress_bar.setValue(progress)
+            QApplication.processEvents()
+        self.progress_bar.setVisible(False)
+        # QMessageBox.information(self, "Thông báo", 
+        #                       f"Đã tạo {total_augmented} ảnh mới từ {num_images} ảnh gốc trong thư mục {save_dir}")
 
     def get_current_image(self):
         """Lấy ảnh hiện tại từ main window"""
