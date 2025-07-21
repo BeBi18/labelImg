@@ -2013,8 +2013,8 @@ class MainWindow(QMainWindow, WindowMixin):
         # Chuyển QImage sang numpy array
         width = image.width()
         height = image.height()
-        print('image.format()', image.format())
-        print('image.format()', type(image.format()))
+        # print('image.format()', image.format())
+        # print('image.format()', type(image.format()))
         # Chuyển đổi QImage sang numpy array dựa trên format của ảnh
         # if image.format() == QImage.Format_RGB32:
         #     print('image.format()', image.format())
@@ -2035,7 +2035,7 @@ class MainWindow(QMainWindow, WindowMixin):
         
         if image.format() == QImage.Format_RGB32:
             # Format_RGB32 = 4, actually BGRA format in Qt
-            print('Processing RGB32 (BGRA) format')
+            # print('Processing RGB32 (BGRA) format')
             ptr = image.bits()
             ptr.setsize(height * width * 4)
             arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 4))
@@ -2044,7 +2044,7 @@ class MainWindow(QMainWindow, WindowMixin):
             
         elif image.format() == QImage.Format_ARGB32:
             # Format_ARGB32 = 2, ARGB format
-            print('Processing ARGB32 format')
+            # print('Processing ARGB32 format')
             ptr = image.bits()
             ptr.setsize(height * width * 4)
             arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 4))
@@ -2053,7 +2053,7 @@ class MainWindow(QMainWindow, WindowMixin):
             
         elif image.format() == QImage.Format_RGB888:
             # Format_RGB888 = 13
-            print('Processing RGB888 format')
+            # print('Processing RGB888 format')
             ptr = image.bits()
             ptr.setsize(height * width * 3)
             arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
@@ -2062,7 +2062,7 @@ class MainWindow(QMainWindow, WindowMixin):
             
         elif image.format() == QImage.Format_Grayscale8:
             # Format_Grayscale8 = 24
-            print('Processing Grayscale8 format')
+            # print('Processing Grayscale8 format')
             ptr = image.bits()
             ptr.setsize(height * width)
             arr = np.frombuffer(ptr, np.uint8).reshape((height, width))
@@ -2071,7 +2071,7 @@ class MainWindow(QMainWindow, WindowMixin):
             
         elif image.format() == QImage.Format_Indexed8:
             # Format_Indexed8 = 3
-            print('Processing Indexed8 format')
+            # print('Processing Indexed8 format')
             # Convert to RGB888 first
             image = image.convertToFormat(QImage.Format_RGB888)
             ptr = image.bits()
@@ -2081,7 +2081,7 @@ class MainWindow(QMainWindow, WindowMixin):
             
         else:
             # Handle other formats by converting to RGB888
-            print(f'Converting unknown format {image.format()} to RGB888')
+            # print(f'Converting unknown format {image.format()} to RGB888')
             image = image.convertToFormat(QImage.Format_RGB888)
             ptr = image.bits()
             ptr.setsize(height * width * 3)
@@ -2116,7 +2116,9 @@ class MainWindow(QMainWindow, WindowMixin):
                 bbox = [shape.points[0].x(), shape.points[0].y(),
                        shape.points[2].x(), shape.points[2].y()]
                 new_bbox = update_bbox(bbox, augmented.shape, params)
-                
+                if new_bbox is None:
+                    # print(f"Bbox {bbox} bị cắt hoàn toàn -> Bỏ qua")
+                    continue
                 # Tạo shape mới dưới dạng dictionary
                 new_shape = {
                     'label': shape.label,

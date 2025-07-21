@@ -1237,7 +1237,7 @@ def rotate_90(image, direction='clockwise'):
 
 def crop_image(image, scale):
     """Crop ảnh với tỷ lệ scale cho trước
-    scale: tỷ lệ crop (0.1-1.0)
+    scale: tỷ lệ crop (1-100)
     """
     height, width = image.shape[:2]
     scale = 1 - scale / 100
@@ -1458,7 +1458,7 @@ def augment_image(image, params):
             augmented = add_noise(augmented, 'salt_pepper', percent=params.get('salt_pepper_percent', 5))
         
         elif method == 'crop':
-            scale = random.uniform(params.get('crop_min', 0.8), params.get('crop_max', 1.0))
+            scale = random.uniform(params.get('crop_min', 10), params.get('crop_max', 10))
             augmented = crop_image(augmented, scale)
             params['crop_scale'] = scale
             
@@ -1554,7 +1554,9 @@ def update_bbox(bbox, image_shape, params):
                 y1, y2 = height - y2, height - y1
             
         elif method == 'crop':
-            scale = params.get('crop_scale', 1.0)
+            scale = params.get('crop_scale', 10)
+            scale = 1 - scale/100
+            # print(scale)
             # Tính toán kích thước mới
             new_height = int(height * scale)
             new_width = int(width * scale)
@@ -1687,9 +1689,10 @@ def update_bbox(bbox, image_shape, params):
     # Đảm bảo tọa độ nằm trong ảnh và bbox hợp lệ
     x1 = max(0, min(x1, width-1))
     y1 = max(0, min(y1, height-1))
-    x2 = max(x1+1, min(x2, width))
-    y2 = max(y1+1, min(y2, height))
-    
+    x2 = max(x1, min(x2, width))
+    y2 = max(y1, min(y2, height))
+    if x1+10 >= x2 or y1+10 >= y2:
+        return None
     return [x1, y1, x2, y2]
 
 
