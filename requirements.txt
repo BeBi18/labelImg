@@ -1,1 +1,8 @@
-  ultralytics>=8.0.0
+pyqt5 
+lxml
+numpy
+opencv-python
+torch 
+torchvision 
+torchaudio
+ultralytics

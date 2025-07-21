@@ -51,6 +51,8 @@ from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
 from libs.image_processor import ImageProcessorWidget
 from libs.image_augmentation import AugmentationWidget, augment_image, update_bbox
+from ultralytics import YOLO
+import traceback
 
 __appname__ = 'labelImg'
 
@@ -72,6 +74,73 @@ class WindowMixin(object):
             add_actions(toolbar, actions)
         self.addToolBar(Qt.LeftToolBarArea, toolbar)
         return toolbar
+
+
+class AutoLabelThread(QThread):
+    progress_update = pyqtSignal(int)
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+    def __init__(self, img_list, model_path, conf_thres, save_dir):
+        super().__init__()
+        self.img_list = img_list
+        self.model_path = model_path
+        self.conf_thres = conf_thres
+        self.save_dir = save_dir
+
+    def run(self):
+        try:
+            model = YOLO(self.model_path)
+            all_class_names = set()
+            results_per_image = []
+            for idx, img_path in enumerate(self.img_list):
+                results = model(img_path, conf=self.conf_thres)
+                boxes = results[0].boxes
+                names = results[0].names
+                dets = []
+                for box in boxes:
+                    cls_idx = int(box.cls[0].item())
+                    class_name = names[cls_idx]
+                    all_class_names.add(class_name)
+                    xyxy = box.xyxy[0].cpu().numpy()
+                    x_min, y_min, x_max, y_max = map(float, xyxy)
+                    dets.append((cls_idx, class_name, x_min, y_min, x_max, y_max))
+                results_per_image.append((img_path, dets))
+                self.progress_update.emit(int((idx + 1) / len(self.img_list) * 100))
+            # Sort class names by first appearance index
+            class_list = []
+            class_name_to_idx = {}
+            for _, dets in results_per_image:
+                for cls_idx, class_name, *_ in dets:
+                    if class_name not in class_name_to_idx:
+                        class_name_to_idx[class_name] = len(class_list)
+                        class_list.append(class_name)
+            # Write classes.txt
+            classes_path = os.path.join(self.save_dir, "classes.txt")
+            with open(classes_path, "w", encoding="utf-8") as f:
+                for name in class_list:
+                    f.write(f"{name}\n")
+            # Write YOLO .txt for each image
+            for img_path, dets in results_per_image:
+                txt_path = os.path.splitext(img_path)[0] + ".txt"
+                txt_path = os.path.join(self.save_dir, os.path.basename(txt_path))
+                with open(txt_path, "w", encoding="utf-8") as f:
+                    for cls_idx, class_name, x_min, y_min, x_max, y_max in dets:
+                        idx = class_name_to_idx[class_name]
+                        # Convert to YOLO format (normalized cx, cy, w, h)
+                        from PIL import Image
+                        with Image.open(img_path) as im:
+                            w_img, h_img = im.size
+                        x_center = (x_min + x_max) / 2 / w_img
+                        y_center = (y_min + y_max) / 2 / h_img
+                        w = (x_max - x_min) / w_img
+                        h = (y_max - y_min) / h_img
+                        f.write(f"{idx} {x_center:.6f} {y_center:.6f} {w:.6f} {h:.6f}\n")
+            self.progress_update.emit(100)
+            self.finished.emit(f"Auto labeling completed! {len(self.img_list)} images processed.")
+        except Exception as e:
+            tb = traceback.format_exc()
+            self.error.emit(f"Error: {e}\n{tb}")
 
 
 class MainWindow(QMainWindow, WindowMixin):
@@ -142,6 +211,35 @@ class MainWindow(QMainWindow, WindowMixin):
         use_default_label_qhbox_layout.addWidget(self.default_label_combo_box)
         use_default_label_container = QWidget()
         use_default_label_container.setLayout(use_default_label_qhbox_layout)
+
+        # --- AUTO LABEL (YOLO) UI ---
+        self.select_yolo_model_btn = QPushButton("Select YOLO Model")
+        self.selected_model_label = QLabel("No model selected")
+        self.confidence_label = QLabel("Confidence threshold:")
+        self.confidence_spin = QDoubleSpinBox()
+        self.confidence_spin.setRange(0.01, 1.0)
+        self.confidence_spin.setSingleStep(0.01)
+        self.confidence_spin.setValue(0.25)
+        self.auto_label_btn = QPushButton("Auto Label (YOLO)")
+        self.auto_label_progress = QProgressBar()
+        self.auto_label_progress.setValue(0)
+        self.auto_label_progress.setVisible(False)
+
+        # Layout for model selection and threshold
+        auto_label_layout = QVBoxLayout()
+        auto_label_layout.addWidget(self.select_yolo_model_btn)
+        auto_label_layout.addWidget(self.selected_model_label)
+        conf_layout = QHBoxLayout()
+        conf_layout.addWidget(self.confidence_label)
+        conf_layout.addWidget(self.confidence_spin)
+        auto_label_layout.addLayout(conf_layout)
+        auto_label_layout.addWidget(self.auto_label_btn)
+        auto_label_layout.addWidget(self.auto_label_progress)
+        auto_label_container = QWidget()
+        auto_label_container.setLayout(auto_label_layout)
+
+        # Insert auto label UI after use_default_label_container, before combo_box
+        list_layout.addWidget(auto_label_container)
 
         # Create a widget for edit and diffc button
         self.diffc_button = QCheckBox(get_str('useDifficult'))
@@ -248,7 +346,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         open_annotation = action(get_str('openAnnotation'), self.open_annotation_dialog,
                                  'Ctrl+Shift+O', 'open', get_str('openAnnotationDetail'))
-        copy_prev_bounding = action(get_str('copyPrevBounding'), self.copy_previous_bounding_boxes, 'Ctrl+v', 'copy', get_str('copyPrevBounding'))
+        copy_prev_bounding = action(get_str('copyPrevBounding'), self.copy_previous_bounding_boxes, 'Ctrl+D', 'copy', get_str('copyPrevBounding'))
 
         open_next_image = action(get_str('nextImg'), self.open_next_image,
                                  'd', 'next', get_str('nextImgDetail'))
@@ -300,7 +398,7 @@ class MainWindow(QMainWindow, WindowMixin):
         delete = action(get_str('delBox'), self.delete_selected_shape,
                         'Delete', 'delete', get_str('delBoxDetail'), enabled=False)
         copy = action(get_str('dupBox'), self.copy_selected_shape,
-                      'Ctrl+D', 'copy', get_str('dupBoxDetail'),
+                      'Ctrl+V', 'copy', get_str('dupBoxDetail'),
                       enabled=False)
 
         advanced_mode = action(get_str('advancedMode'), self.toggle_advanced_mode,
@@ -560,6 +658,13 @@ class MainWindow(QMainWindow, WindowMixin):
             self.open_dir_dialog(dir_path=self.file_path, silent=True)
 
         QTimer.singleShot(100, self.show_all_docks)
+
+        self.yolo_model_path = None
+        self.yolo_model_loaded = False
+        self.auto_label_thread = None
+
+        self.select_yolo_model_btn.clicked.connect(self.select_yolo_model)
+        self.auto_label_btn.clicked.connect(self.start_auto_label)
 
 
     def keyReleaseEvent(self, event):
@@ -2105,6 +2210,44 @@ class MainWindow(QMainWindow, WindowMixin):
         for dock_name in docks:
             if hasattr(self, dock_name):
                 getattr(self, dock_name).setVisible(True)
+
+    def select_yolo_model(self):
+        model_path, _ = QFileDialog.getOpenFileName(self, "Select YOLO .pt Model", ".", "YOLO Model (*.pt)")
+        if model_path:
+            self.yolo_model_path = model_path
+            self.selected_model_label.setText(os.path.basename(model_path))
+            self.yolo_model_loaded = True
+        else:
+            self.selected_model_label.setText("No model selected")
+            self.yolo_model_loaded = False
+
+    def start_auto_label(self):
+        if not self.yolo_model_loaded or not self.yolo_model_path:
+            QMessageBox.warning(self, "Warning", "Please select a YOLO .pt model first.")
+            return
+        if not self.m_img_list:
+            QMessageBox.warning(self, "Warning", "No images found in the current directory.")
+            return
+        conf = self.confidence_spin.value()
+        save_dir = self.default_save_dir or os.path.dirname(self.m_img_list[0])
+        self.auto_label_progress.setVisible(True)
+        self.auto_label_progress.setValue(0)
+        self.auto_label_btn.setEnabled(False)
+        self.auto_label_thread = AutoLabelThread(self.m_img_list, self.yolo_model_path, conf, save_dir)
+        self.auto_label_thread.progress_update.connect(self.auto_label_progress.setValue)
+        self.auto_label_thread.finished.connect(self.on_auto_label_finished)
+        self.auto_label_thread.error.connect(self.on_auto_label_error)
+        self.auto_label_thread.start()
+
+    def on_auto_label_finished(self, msg):
+        self.auto_label_progress.setVisible(False)
+        self.auto_label_btn.setEnabled(True)
+        QMessageBox.information(self, "Auto Label", msg)
+
+    def on_auto_label_error(self, msg):
+        self.auto_label_progress.setVisible(False)
+        self.auto_label_btn.setEnabled(True)
+        QMessageBox.critical(self, "Auto Label Error", msg)
 
 def inverted(color):
     return QColor(*[255 - v for v in color.getRgb()])
